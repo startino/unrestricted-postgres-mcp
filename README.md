@@ -7,33 +7,6 @@
 
 A powerful Model Context Protocol server providing **full read-write access** to PostgreSQL databases. Unlike the read-only official MCP PostgreSQL server, this enhanced implementation allows Large Language Models (LLMs) to both query and modify database content with proper transaction management and safety controls.
 
-## Table of Contents
-
-- [Features](#features)
-  - [Full Read-Write Access](#full-read-write-access)
-  - [Rich Schema Information](#rich-schema-information)
-  - [Advanced Safety Controls](#advanced-safety-controls)
-- [Tools](#tools)
-  - [execute_query](#execute_query)
-  - [execute_dml_ddl_dcl_tcl](#execute_dml_ddl_dcl_tcl)
-  - [execute_maintenance](#execute_maintenance)
-  - [execute_commit](#execute_commit)
-  - [execute_rollback](#execute_rollback)
-  - [list_tables](#list_tables)
-  - [describe_table](#describe_table)
-- [Resources](#resources)
-- [Using with Claude Desktop](#using-with-claude-desktop)
-  - [Claude Desktop Integration](#claude-desktop-integration)
-  - [Important: Using "Allow Once" for Safety](#important-using-allow-once-for-safety)
-- [Environment Variables](#environment-variables)
-- [Using Full Database Access with Claude](#using-full-database-access-with-claude)
-- [Security Considerations](#security-considerations)
-  - [Database User Permissions](#database-user-permissions)
-  - [Best Practices for Safe Usage](#best-practices-for-safe-usage)
-- [Docker](#docker)
-- [License](#license)
-- [Comparison with Official PostgreSQL MCP Server](#comparison-with-official-postgresql-mcp-server)
-
 ## 🌟 Features
 
 ### Full Read-Write Access
