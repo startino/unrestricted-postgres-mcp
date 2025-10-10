@@ -18,6 +18,9 @@ import {
   handleListResources,
   handleReadResource,
   handleListTransactions,
+  handleForceRollback,
+  handleResetSession,
+  handleGetConnectionStatus,
 } from "./lib/tool-handlers";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
@@ -376,6 +379,72 @@ server.tool(
   async (args, extra) => {
     try {
       const result = await handleListTransactions(transactionManager);
+      return transformHandlerResponse(result);
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: error instanceof Error ? error.message : String(error),
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
+  "force_rollback",
+  "Force rollback any aborted transactions to clear blocked database state. Use this when you get 'current transaction is aborted' errors.",
+  {},
+  async (args, extra) => {
+    try {
+      const result = await handleForceRollback(pool);
+      return transformHandlerResponse(result);
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: error instanceof Error ? error.message : String(error),
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
+  "reset_session",
+  "Completely reset the database session to clear all transaction state and connection issues. Use this as a last resort when force_rollback doesn't work.",
+  {},
+  async (args, extra) => {
+    try {
+      const result = await handleResetSession(pool);
+      return transformHandlerResponse(result);
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: error instanceof Error ? error.message : String(error),
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
+  "get_connection_status",
+  "Check the current database connection status including transaction state, aborted state, and session information. Useful for debugging connection issues.",
+  {},
+  async (args, extra) => {
+    try {
+      const result = await handleGetConnectionStatus(pool);
       return transformHandlerResponse(result);
     } catch (error) {
       return {
