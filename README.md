@@ -263,27 +263,9 @@ GRANT INSERT, UPDATE, DELETE ON TABLE table1, table2 TO claude_user;
    - Confirm WHERE clauses are appropriate
    - Look for proper transaction handling
 
-### Docker
-
-The server can be easily run in a Docker container:
-
-```bash
-# Build the Docker image
-docker build -t mcp-postgres-full-access .
-
-# Run the container
-docker run -i --rm mcp-postgres-full-access "postgresql://username:password@host:5432/database"
-```
-
-For Docker on macOS, use host.docker.internal to connect to the host network:
-
-```bash
-docker run -i --rm mcp-postgres-full-access "postgresql://username:password@host.docker.internal:5432/database"
-```
-
 ## 📄 License
 
-This MCP server is licensed under the MIT License.
+This MCP server is licensed under the Apache License Version 2.0.
 
 ## 💡 Comparison with Official PostgreSQL MCP Server
 
@@ -300,8 +282,5 @@ This MCP server is licensed under the MIT License.
 
 ## Author
 
+Maintained by Jonas Lindberg ([@eksno](https://github.com/eksno))
 Created by Syahiid Nur Kamil ([@syahiidkamil](https://github.com/syahiidkamil))
-
----
-
-Copyright © 2024 Syahiid Nur Kamil. All rights reserved.
