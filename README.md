@@ -1,7 +1,9 @@
 # PostgreSQL Full Access MCP Server
 
+> Fork of [mcp-postgres-full-access by syahiidkamil](https://github.com/syahiidkamil/mcp-postgres-full-access) to continue it's maintenance.
+
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Compatible-blue.svg)](https://modelcontextprotocol.io)
-[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Apache License Version 2](https://img.shields.io/badge/License-APACHE-green.svg)](LICENSE)
 
 A powerful Model Context Protocol server providing **full read-write access** to PostgreSQL databases. Unlike the read-only official MCP PostgreSQL server, this enhanced implementation allows Large Language Models (LLMs) to both query and modify database content with proper transaction management and safety controls.
 
@@ -62,14 +64,12 @@ A powerful Model Context Protocol server providing **full read-write access** to
 ## 🔧 Tools
 
 - **execute_query**
-
   - Execute read-only SQL queries (SELECT statements)
   - Input: `sql` (string): The SQL query to execute
   - All queries are executed within a READ ONLY transaction
   - Results include execution time metrics and field information
 
 - **execute_dml_ddl_dcl_tcl**
-
   - Execute data modification operations (INSERT, UPDATE, DELETE) or schema changes (CREATE, ALTER, DROP)
   - Input: `sql` (string): The SQL statement to execute
   - Automatically wrapped in a transaction with configurable timeout
@@ -77,27 +77,23 @@ A powerful Model Context Protocol server providing **full read-write access** to
   - **Important safety feature**: The conversation will end after execution, allowing the user to review the results before deciding to commit or rollback
 
 - **execute_maintenance**
-
   - Execute maintenance commands like VACUUM, ANALYZE, or CREATE DATABASE outside of transactions
   - Input: `sql` (string): The SQL statement to execute - must be VACUUM, ANALYZE, or CREATE DATABASE
   - Returns a result object with execution time metrics
 
 - **execute_commit**
-
   - Explicitly commit a transaction by its ID
   - Input: `transaction_id` (string): ID of the transaction to commit
   - Safely handles cleanup after commit or rollback
   - Permanently applies changes to the database
 
 - **execute_rollback**
-
   - Explicitly rollback a transaction by its ID
   - Input: `transaction_id` (string): ID of the transaction to rollback
   - Safely discards all changes and cleans up resources
   - Useful when reviewing changes and deciding not to apply them
 
 - **list_tables**
-
   - Get a comprehensive list of all tables in the database
   - Includes column count and table descriptions
   - No input parameters required
@@ -181,27 +177,22 @@ You can customize the server behavior with environment variables in your Claude 
 Key environment variables:
 
 - `TRANSACTION_TIMEOUT_MS`: Transaction timeout in milliseconds (default: 15000)
-
   - Increase this if your transactions need more time
   - Transactions exceeding this time will be automatically rolled back for safety
 
 - `MAX_CONCURRENT_TRANSACTIONS`: Maximum concurrent transactions (default: 10)
-
   - Lower this number for more conservative operation
   - Higher values allow more simultaneous write operations
 
 - `ENABLE_TRANSACTION_MONITOR`: Enable/disable transaction monitor ("true" or "false", default: "true")
-
   - Monitors and automatically rolls back abandoned transactions
   - Rarely needs to be disabled
 
 - `PG_STATEMENT_TIMEOUT_MS`: SQL query execution timeout in ms (default: 30000)
-
   - Limits how long any single SQL statement can run
   - Important safety feature to prevent runaway queries
 
 - `PG_MAX_CONNECTIONS`: Maximum PostgreSQL connections (default: 20)
-
   - Important to stay within your database's connection limits
 
 - `MONITOR_INTERVAL_MS`: How often to check for stuck transactions (default: 5000)
@@ -279,16 +270,13 @@ GRANT INSERT, UPDATE, DELETE ON TABLE table1, table2 TO claude_user;
 ### Best Practices for Safe Usage
 
 1. **Always use "Allow once"** to review each write operation
-
    - Never select "Always allow" for database modifications
    - Take time to review the SQL carefully
 
 2. **Connect to a testing database** when first exploring this tool
-
    - Consider using a database copy/backup for initial testing
 
 3. **Limit database user permissions** to only what's necessary
-
    - Avoid using a superuser or admin account
    - Grant table-specific permissions when possible
 
