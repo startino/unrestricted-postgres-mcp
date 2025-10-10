@@ -22,20 +22,13 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import express from "express";
 
 // Process command line arguments
-const args = process.argv.slice(2);
-if (args.length === 0) {
-  console.error("Please provide a database URL as a command-line argument");
-  process.exit(1);
-}
-
-const databaseUrl = args[0];
-const resourceBaseUrl = new URL(databaseUrl);
+const resourceBaseUrl = new URL(config.pg.url);
 resourceBaseUrl.protocol = "postgres:";
 resourceBaseUrl.password = ""; // Remove password for security
 
 // Create a connection pool with configured settings
 const pool = new pg.Pool({
-  connectionString: databaseUrl,
+  connectionString: config.pg.url,
   max: config.pg.maxConnections,
   idleTimeoutMillis: config.pg.idleTimeoutMillis,
   statement_timeout: config.pg.statementTimeout,
