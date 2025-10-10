@@ -737,3 +737,77 @@ export async function handleReadResource(pool: pg.Pool, resourceUri: string) {
     safelyReleaseClient(client);
   }
 }
+
+export async function handleListTransactions(
+  transactionManager: TransactionManager,
+): Promise<{ content: Array<{ type: "text"; text: string }>; isError: boolean }> {
+  try {
+    const transactions = transactionManager.getAllTransactions();
+    
+    if (transactions.length === 0) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                status: "success",
+                message: "No active transactions",
+                transaction_count: 0,
+                transactions: [],
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+        isError: false,
+      };
+    }
+
+    const transactionList = transactions.map((tx) => ({
+      id: tx.id,
+      start_time: new Date(tx.startTime).toISOString(),
+      duration_ms: Date.now() - tx.startTime,
+      state: tx.state,
+      released: tx.released,
+      sql_preview: tx.sql,
+    }));
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              status: "success",
+              message: `Found ${transactions.length} active transaction(s)`,
+              transaction_count: transactions.length,
+              transactions: transactionList,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+      isError: false,
+    };
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              status: "error",
+              message: error instanceof Error ? error.message : String(error),
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+      isError: true,
+    };
+  }
+}

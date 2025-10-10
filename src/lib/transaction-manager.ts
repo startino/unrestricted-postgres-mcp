@@ -62,6 +62,13 @@ export class TransactionManager {
   }
 
   /**
+   * Get all active transactions
+   */
+  getAllTransactions(): TrackedTransaction[] {
+    return Array.from(this.activeTransactions.values());
+  }
+
+  /**
    * Start the transaction monitor
    */
   startMonitor(): void {

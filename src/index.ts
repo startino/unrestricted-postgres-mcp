@@ -17,6 +17,7 @@ import {
   handleDescribeTable,
   handleListResources,
   handleReadResource,
+  handleListTransactions,
 } from "./lib/tool-handlers";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
@@ -353,6 +354,28 @@ server.tool(
         args.table_name,
         args.schema_name,
       );
+      return transformHandlerResponse(result);
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: error instanceof Error ? error.message : String(error),
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
+  "list_transactions",
+  "List all currently active transactions with their details including ID, start time, duration, state, and SQL preview",
+  {},
+  async (args, extra) => {
+    try {
+      const result = await handleListTransactions(transactionManager);
       return transformHandlerResponse(result);
     } catch (error) {
       return {
