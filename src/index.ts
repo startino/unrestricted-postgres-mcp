@@ -5,9 +5,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import pg from "pg";
 
-import config from "./lib/config.js";
-import { TransactionManager } from "./lib/transaction-manager.js";
-import { safelyReleaseClient } from "./lib/utils.js";
+import config from "./lib/config";
+import { TransactionManager } from "./lib/transaction-manager";
+import { safelyReleaseClient } from "./lib/utils";
 import {
   handleExecuteQuery,
   handleExecuteDML,
@@ -17,7 +17,7 @@ import {
   handleDescribeTable,
   handleListResources,
   handleReadResource,
-} from "./lib/tool-handlers.js";
+} from "./lib/tool-handlers";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
 

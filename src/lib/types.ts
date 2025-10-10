@@ -9,6 +9,6 @@ export interface TrackedTransaction {
   client: pg.PoolClient;
   startTime: number;
   sql: string;
-  state: 'active' | 'terminating';
+  state: "active" | "terminating";
   released: boolean; // Track if this client has been released
 }

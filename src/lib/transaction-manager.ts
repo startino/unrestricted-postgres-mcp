@@ -1,6 +1,6 @@
 import pg from "pg";
-import { TrackedTransaction } from "./types.js";
-import { safelyReleaseClient } from "./utils.js";
+import { TrackedTransaction } from "./types";
+import { safelyReleaseClient } from "./utils";
 
 export class TransactionManager {
   private activeTransactions = new Map<string, TrackedTransaction>();
@@ -12,7 +12,7 @@ export class TransactionManager {
   constructor(
     transactionTimeoutMs: number = 15000,
     monitorIntervalMs: number = 5000,
-    monitorEnabled: boolean = true
+    monitorEnabled: boolean = true,
   ) {
     this.transactionTimeoutMs = transactionTimeoutMs;
     this.monitorIntervalMs = monitorIntervalMs;
@@ -28,8 +28,8 @@ export class TransactionManager {
       client,
       startTime: Date.now(),
       sql: sql.substring(0, 100), // Store beginning of query for debugging
-      state: 'active',
-      released: false
+      state: "active",
+      released: false,
     });
   }
 
@@ -66,10 +66,12 @@ export class TransactionManager {
    */
   startMonitor(): void {
     if (this.monitorEnabled && !this.monitorInterval) {
-      console.error(`Starting transaction monitor with timeout ${this.transactionTimeoutMs}ms, checking every ${this.monitorIntervalMs}ms`);
+      console.error(
+        `Starting transaction monitor with timeout ${this.transactionTimeoutMs}ms, checking every ${this.monitorIntervalMs}ms`,
+      );
       this.monitorInterval = setInterval(
-        () => this.checkStuckTransactions(), 
-        this.monitorIntervalMs
+        () => this.checkStuckTransactions(),
+        this.monitorIntervalMs,
       );
     } else if (!this.monitorEnabled) {
       console.error("Transaction monitor is disabled");
@@ -92,18 +94,20 @@ export class TransactionManager {
   private checkStuckTransactions(): void {
     const now = Date.now();
     let terminatedCount = 0;
-    
+
     for (const [id, transaction] of this.activeTransactions.entries()) {
       // Skip already released transactions awaiting cleanup
       if (transaction.released) continue;
-      
+
       const age = now - transaction.startTime;
-      
-      if (age > this.transactionTimeoutMs && transaction.state === 'active') {
-        console.error(`Transaction ${id} has been running for ${age}ms and will be rolled back`);
-        transaction.state = 'terminating';
+
+      if (age > this.transactionTimeoutMs && transaction.state === "active") {
+        console.error(
+          `Transaction ${id} has been running for ${age}ms and will be rolled back`,
+        );
+        transaction.state = "terminating";
         terminatedCount++;
-        
+
         // Handle in async function to avoid blocking the monitor
         (async () => {
           try {
@@ -120,53 +124,63 @@ export class TransactionManager {
             }
             this.removeTransaction(id);
           }
-        })().catch(err => {
-          console.error(`Unhandled error in transaction cleanup for ${id}:`, err);
+        })().catch((err) => {
+          console.error(
+            `Unhandled error in transaction cleanup for ${id}:`,
+            err,
+          );
           // Ensure cleanup even on error
           if (!transaction.released) {
             transaction.released = true;
             try {
               safelyReleaseClient(transaction.client);
             } catch (releaseErr) {
-              console.error(`Final release attempt failed for ${id}:`, releaseErr);
+              console.error(
+                `Final release attempt failed for ${id}:`,
+                releaseErr,
+              );
             }
           }
           this.removeTransaction(id);
         });
       }
     }
-    
+
     if (terminatedCount > 0) {
-      console.error(`Terminated ${terminatedCount} stuck transactions. Remaining active: ${this.transactionCount}`);
+      console.error(
+        `Terminated ${terminatedCount} stuck transactions. Remaining active: ${this.transactionCount}`,
+      );
     }
   }
 
   /**
-   * Clean up any pending transactions 
+   * Clean up any pending transactions
    */
   async cleanupTransactions(): Promise<void> {
     console.error(`Cleaning up ${this.transactionCount} active transactions`);
-    
+
     const transactionEntries = Array.from(this.activeTransactions.entries());
     for (const [id, transaction] of transactionEntries) {
       // Skip already released transactions
       if (transaction.released) {
-        console.error(`Transaction ${id} already marked as released, skipping cleanup`);
+        console.error(
+          `Transaction ${id} already marked as released, skipping cleanup`,
+        );
         this.removeTransaction(id);
         continue;
       }
-      
+
       try {
         await transaction.client.query("ROLLBACK");
         console.error(`Rolled back transaction ${id}`);
-        
+
         // Mark as released to prevent double-release attempts
         transaction.released = true;
         safelyReleaseClient(transaction.client);
         this.removeTransaction(id);
       } catch (error) {
         console.error(`Error rolling back transaction ${id}:`, error);
-        
+
         // Even on error, mark as released and attempt to release
         transaction.released = true;
         try {
@@ -177,7 +191,7 @@ export class TransactionManager {
         this.removeTransaction(id);
       }
     }
-    
+
     this.activeTransactions.clear();
   }
 }

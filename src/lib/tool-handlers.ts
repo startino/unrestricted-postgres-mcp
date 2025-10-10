@@ -1,6 +1,15 @@
+import pg from "pg";
+import { TransactionManager } from "./transaction-manager";
+import {
+  isReadOnlyQuery,
+  safelyReleaseClient,
+  generateTransactionId,
+} from "./utils";
+import { SCHEMA_PATH } from "./types";
+
 export async function handleExecuteRollback(
-  transactionManager: TransactionManager, 
-  transactionId: string
+  transactionManager: TransactionManager,
+  transactionId: string,
 ) {
   if (!transactionId) {
     return {
@@ -8,61 +17,81 @@ export async function handleExecuteRollback(
       isError: true,
     };
   }
-  
+
   // Check if transaction exists
   if (!transactionManager.hasTransaction(transactionId)) {
     return {
-      content: [{ 
-        type: "text", 
-        text: JSON.stringify({
-          status: "error",
-          message: "Transaction not found or already rolled back",
-          transaction_id: transactionId
-        }, null, 2) 
-      }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              status: "error",
+              message: "Transaction not found or already rolled back",
+              transaction_id: transactionId,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
       isError: true,
     };
   }
-  
+
   // Get the transaction data
   const transaction = transactionManager.getTransaction(transactionId)!;
-  
+
   // Check if already released
   if (transaction.released) {
     transactionManager.removeTransaction(transactionId);
     return {
-      content: [{ 
-        type: "text", 
-        text: JSON.stringify({
-          status: "error",
-          message: "Transaction client already released",
-          transaction_id: transactionId
-        }, null, 2) 
-      }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              status: "error",
+              message: "Transaction client already released",
+              transaction_id: transactionId,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
       isError: true,
     };
   }
-  
+
   try {
     // Rollback the transaction
     await transaction.client.query("ROLLBACK");
-    
+
     // Mark as released before actually releasing
     transaction.released = true;
     safelyReleaseClient(transaction.client);
-    
+
     // Clean up
     transactionManager.removeTransaction(transactionId);
-    
+
     return {
-      content: [{ 
-        type: "text", 
-        text: JSON.stringify({
-          status: "rolled_back",
-          message: "Transaction successfully rolled back",
-          transaction_id: transactionId
-        }, null, 2) + "\n\nTransaction has been successfully rolled back. No changes have been made to the database.\n\nThank you for using PostgreSQL Full Access MCP Server. Is there anything else you'd like to do with your database?"
-      }],
+      content: [
+        {
+          type: "text",
+          text:
+            JSON.stringify(
+              {
+                status: "rolled_back",
+                message: "Transaction successfully rolled back",
+                transaction_id: transactionId,
+              },
+              null,
+              2,
+            ) +
+            "\n\nTransaction has been successfully rolled back. No changes have been made to the database.\n\nThank you for using PostgreSQL Full Access MCP Server. Is there anything else you'd like to do with your database?",
+        },
+      ],
       isError: false,
     };
   } catch (error: any) {
@@ -70,26 +99,29 @@ export async function handleExecuteRollback(
     // Mark as released before actually releasing
     transaction.released = true;
     safelyReleaseClient(transaction.client);
-    
+
     // Clean up
     transactionManager.removeTransaction(transactionId);
-    
+
     return {
-      content: [{ 
-        type: "text", 
-        text: JSON.stringify({
-          status: "error",
-          message: `Error rolling back transaction: ${error.message}`,
-          transaction_id: transactionId
-        }, null, 2) 
-      }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              status: "error",
+              message: `Error rolling back transaction: ${error.message}`,
+              transaction_id: transactionId,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
       isError: true,
     };
   }
-}import pg from "pg";
-import { TransactionManager } from "./transaction-manager.js";
-import { isReadOnlyQuery, safelyReleaseClient, generateTransactionId } from "./utils.js";
-import { SCHEMA_PATH } from "./types.js";
+}
 
 export async function handleExecuteQuery(pool: pg.Pool, sql: string) {
   const client = await pool.connect();
@@ -101,40 +133,48 @@ export async function handleExecuteQuery(pool: pg.Pool, sql: string) {
         isError: true,
       };
     }
-    
+
     // Validate that the query is read-only
     if (!isReadOnlyQuery(sql)) {
       safelyReleaseClient(client);
       return {
-        content: [{ 
-          type: "text", 
-          text: "Error: Only SELECT queries are allowed with execute_query. For other operations, use execute_dml_ddl_dcl_tcl."
-        }],
+        content: [
+          {
+            type: "text",
+            text: "Error: Only SELECT queries are allowed with execute_query. For other operations, use execute_dml_ddl_dcl_tcl.",
+          },
+        ],
         isError: true,
       };
     }
-    
+
     // Execute the query in a read-only transaction
     await client.query("BEGIN TRANSACTION READ ONLY");
     const startTime = Date.now();
     const result = await client.query(sql);
     const execTime = Date.now() - startTime;
-    
+
     await client.query("COMMIT");
-    
+
     return {
-      content: [{ 
-        type: "text", 
-        text: JSON.stringify({
-          rows: result.rows,
-          rowCount: result.rowCount,
-          fields: result.fields.map(f => ({
-            name: f.name,
-            dataTypeID: f.dataTypeID
-          })),
-          execution_time_ms: execTime
-        }, null, 2) 
-      }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              rows: result.rows,
+              rowCount: result.rowCount,
+              fields: result.fields.map((f) => ({
+                name: f.name,
+                dataTypeID: f.dataTypeID,
+              })),
+              execution_time_ms: execTime,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
       isError: false,
     };
   } finally {
@@ -143,10 +183,10 @@ export async function handleExecuteQuery(pool: pg.Pool, sql: string) {
 }
 
 export async function handleExecuteDML(
-  pool: pg.Pool, 
-  transactionManager: TransactionManager, 
+  pool: pg.Pool,
+  transactionManager: TransactionManager,
   sql: string,
-  transactionTimeoutMs: number
+  transactionTimeoutMs: number,
 ) {
   const client = await pool.connect();
   try {
@@ -157,24 +197,24 @@ export async function handleExecuteDML(
         isError: true,
       };
     }
-    
+
     // Begin a transaction
     await client.query("BEGIN");
-    
+
     // Generate transaction ID
     const transactionId = generateTransactionId();
-    
+
     try {
       // Execute the SQL statement
       const startTime = Date.now();
       const result = await client.query(sql);
       const execTime = Date.now() - startTime;
-      
+
       // Store client in active transactions
       transactionManager.addTransaction(transactionId, client, sql);
-      
+
       // Don't release the client - it's now associated with the transaction
-      
+
       // Format a more user-friendly message that prompts for commit
       const resultObj = {
         transaction_id: transactionId,
@@ -182,32 +222,46 @@ export async function handleExecuteDML(
         result: {
           command: result.command,
           rowCount: result.rowCount,
-          execution_time_ms: execTime
+          execution_time_ms: execTime,
         },
-        timeout_ms: transactionTimeoutMs
+        timeout_ms: transactionTimeoutMs,
       };
-      
+
       return {
-        content: [{ 
-          type: "text", 
-          text: JSON.stringify(resultObj, null, 2) + "\n\nThe SQL statement has been executed successfully and a transaction has been started.\n\nPLEASE REVIEW THE RESULTS ABOVE AND FOLLOW THESE STEPS:\n1. This conversation will now end so you can review the changes carefully\n2. After reviewing, start a new message and:\n   - Type 'Yes' to COMMIT this transaction and save changes permanently\n   - Type 'No' to ROLLBACK this transaction and discard all changes\n\nThe transaction will automatically roll back if not committed within " + Math.floor(transactionTimeoutMs/1000) + " seconds.\n\nTransaction ID: " + transactionId + "\n\n*** END OF CONVERSATION ***"
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              JSON.stringify(resultObj, null, 2) +
+              "\n\nThe SQL statement has been executed successfully and a transaction has been started.\n\nPLEASE REVIEW THE RESULTS ABOVE AND FOLLOW THESE STEPS:\n1. This conversation will now end so you can review the changes carefully\n2. After reviewing, start a new message and:\n   - Type 'Yes' to COMMIT this transaction and save changes permanently\n   - Type 'No' to ROLLBACK this transaction and discard all changes\n\nThe transaction will automatically roll back if not committed within " +
+              Math.floor(transactionTimeoutMs / 1000) +
+              " seconds.\n\nTransaction ID: " +
+              transactionId +
+              "\n\n*** END OF CONVERSATION ***",
+          },
+        ],
         isError: false,
       };
     } catch (error: any) {
       // If there's an error, roll back and release the client
       await client.query("ROLLBACK");
       safelyReleaseClient(client);
-      
+
       return {
-        content: [{ 
-          type: "text", 
-          text: JSON.stringify({
-            status: "error",
-            message: `Error executing statement: ${error.message}`,
-            sql: sql
-          }, null, 2) 
-        }],
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                status: "error",
+                message: `Error executing statement: ${error.message}`,
+                sql: sql,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
         isError: true,
       };
     }
@@ -218,10 +272,7 @@ export async function handleExecuteDML(
   }
 }
 
-export async function handleExecuteMaintenance(
-  pool: pg.Pool,
-  sql: string
-) {
+export async function handleExecuteMaintenance(pool: pg.Pool, sql: string) {
   const client = await pool.connect();
   try {
     if (!sql) {
@@ -234,11 +285,18 @@ export async function handleExecuteMaintenance(
 
     // Check if the SQL is a maintenance command
     // VACUUM, ANALYZE, CREATE DATABASE can't be executed in a transaction
-    const isMaintenanceCommand = /^(VACUUM|ANALYZE|CREATE DATABASE)/i.test(sql.trim());
+    const isMaintenanceCommand = /^(VACUUM|ANALYZE|CREATE DATABASE)/i.test(
+      sql.trim(),
+    );
     if (!isMaintenanceCommand) {
       safelyReleaseClient(client);
       return {
-        content: [{ type: "text", text: "Error: Only VACUUM, ANALYZE and CREATE DATABASE commands are allowed" }],
+        content: [
+          {
+            type: "text",
+            text: "Error: Only VACUUM, ANALYZE and CREATE DATABASE commands are allowed",
+          },
+        ],
         isError: true,
       };
     }
@@ -248,26 +306,38 @@ export async function handleExecuteMaintenance(
     const execTime = Date.now() - startTime;
 
     return {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          status: "completed",
-          command: result.command,
-          execution_time_ms: execTime
-        }, null, 2)
-      }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              status: "completed",
+              command: result.command,
+              execution_time_ms: execTime,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
       isError: false,
     };
   } catch (error: any) {
     return {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          status: "error",
-          message: `Error executing statement: ${error.message}`,
-          sql: sql
-        }, null, 2)
-      }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              status: "error",
+              message: `Error executing statement: ${error.message}`,
+              sql: sql,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
       isError: true,
     };
   } finally {
@@ -276,8 +346,8 @@ export async function handleExecuteMaintenance(
 }
 
 export async function handleExecuteCommit(
-  transactionManager: TransactionManager, 
-  transactionId: string
+  transactionManager: TransactionManager,
+  transactionId: string,
 ) {
   if (!transactionId) {
     return {
@@ -285,61 +355,81 @@ export async function handleExecuteCommit(
       isError: true,
     };
   }
-  
+
   // Check if transaction exists
   if (!transactionManager.hasTransaction(transactionId)) {
     return {
-      content: [{ 
-        type: "text", 
-        text: JSON.stringify({
-          status: "error",
-          message: "Transaction not found or already committed",
-          transaction_id: transactionId
-        }, null, 2) 
-      }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              status: "error",
+              message: "Transaction not found or already committed",
+              transaction_id: transactionId,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
       isError: true,
     };
   }
-  
+
   // Get the transaction data
   const transaction = transactionManager.getTransaction(transactionId)!;
-  
+
   // Check if already released
   if (transaction.released) {
     transactionManager.removeTransaction(transactionId);
     return {
-      content: [{ 
-        type: "text", 
-        text: JSON.stringify({
-          status: "error",
-          message: "Transaction client already released",
-          transaction_id: transactionId
-        }, null, 2) 
-      }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              status: "error",
+              message: "Transaction client already released",
+              transaction_id: transactionId,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
       isError: true,
     };
   }
-  
+
   try {
     // Commit the transaction
     await transaction.client.query("COMMIT");
-    
+
     // Mark as released before actually releasing
     transaction.released = true;
     safelyReleaseClient(transaction.client);
-    
+
     // Clean up
     transactionManager.removeTransaction(transactionId);
-    
+
     return {
-      content: [{ 
-        type: "text", 
-        text: JSON.stringify({
-          status: "committed",
-          message: "Transaction successfully committed",
-          transaction_id: transactionId
-        }, null, 2) + "\n\nTransaction has been successfully committed. All changes have been saved to the database.\n\nThank you for using PostgreSQL Full Access MCP Server. Is there anything else you'd like to do with your database?"
-      }],
+      content: [
+        {
+          type: "text",
+          text:
+            JSON.stringify(
+              {
+                status: "committed",
+                message: "Transaction successfully committed",
+                transaction_id: transactionId,
+              },
+              null,
+              2,
+            ) +
+            "\n\nTransaction has been successfully committed. All changes have been saved to the database.\n\nThank you for using PostgreSQL Full Access MCP Server. Is there anything else you'd like to do with your database?",
+        },
+      ],
       isError: false,
     };
   } catch (error: any) {
@@ -349,29 +439,38 @@ export async function handleExecuteCommit(
     } catch (rollbackError) {
       console.error("Error during rollback:", rollbackError);
     }
-    
+
     // Mark as released before actually releasing
     transaction.released = true;
     safelyReleaseClient(transaction.client);
-    
+
     // Clean up
     transactionManager.removeTransaction(transactionId);
-    
+
     return {
-      content: [{ 
-        type: "text", 
-        text: JSON.stringify({
-          status: "error",
-          message: `Error committing transaction: ${error.message}`,
-          transaction_id: transactionId
-        }, null, 2) 
-      }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              status: "error",
+              message: `Error committing transaction: ${error.message}`,
+              transaction_id: transactionId,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
       isError: true,
     };
   }
 }
 
-export async function handleListTables(pool: pg.Pool, schemaName: string = "public") {
+export async function handleListTables(
+  pool: pg.Pool,
+  schemaName: string = "public",
+) {
   const client = await pool.connect();
   try {
     const result = await client.query(`
@@ -389,12 +488,14 @@ export async function handleListTables(pool: pg.Pool, schemaName: string = "publ
       ORDER BY 
         t.table_name
     `);
-    
+
     return {
-      content: [{ 
-        type: "text", 
-        text: JSON.stringify(result.rows, null, 2)
-      }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(result.rows, null, 2),
+        },
+      ],
       isError: false,
     };
   } finally {
@@ -402,14 +503,18 @@ export async function handleListTables(pool: pg.Pool, schemaName: string = "publ
   }
 }
 
-export async function handleDescribeTable(pool: pg.Pool, tableName: string, schemaName: string = "public") {
+export async function handleDescribeTable(
+  pool: pg.Pool,
+  tableName: string,
+  schemaName: string = "public",
+) {
   if (!tableName) {
     return {
       content: [{ type: "text", text: "Error: No table name provided" }],
       isError: true,
     };
   }
-  
+
   const client = await pool.connect();
   try {
     // Get column information
@@ -431,7 +536,7 @@ export async function handleDescribeTable(pool: pg.Pool, tableName: string, sche
       ORDER BY 
         ordinal_position
     `);
-    
+
     // Get primary key information
     const pkResult = await client.query(`
       SELECT 
@@ -443,7 +548,7 @@ export async function handleDescribeTable(pool: pg.Pool, tableName: string, sche
         i.indrelid = '${schemaName}.${tableName}'::regclass
         AND i.indisprimary
     `);
-    
+
     // Get foreign key information
     const fkResult = await client.query(`
       SELECT
@@ -460,21 +565,21 @@ export async function handleDescribeTable(pool: pg.Pool, tableName: string, sche
           AND ccu.table_schema = tc.table_schema
       WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_name = '${tableName}' AND tc.table_schema = '${schemaName}'
     `);
-    
+
     // Get table description
     const tableDescResult = await client.query(`
       SELECT pg_catalog.obj_description(pgc.oid, 'pg_class') as table_description
       FROM pg_catalog.pg_class pgc
       WHERE pgc.relname = '${tableName}' AND pgc.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '${schemaName}')
     `);
-    
+
     // Get approximate row count
     const rowCountResult = await client.query(`
       SELECT reltuples::bigint AS approximate_row_count
       FROM pg_class
       WHERE relname = '${tableName}' AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '${schemaName}')
     `);
-    
+
     // Get indexes
     const indexesResult = await client.query(`
       SELECT
@@ -503,21 +608,28 @@ export async function handleDescribeTable(pool: pg.Pool, tableName: string, sche
       ORDER BY
         i.relname
     `);
-    
+
     return {
-      content: [{ 
-        type: "text", 
-        text: JSON.stringify({
-          schema_name: schemaName,
-          table_name: tableName,
-          description: tableDescResult.rows[0]?.table_description || null,
-          approximate_row_count: rowCountResult.rows[0]?.approximate_row_count || 0,
-          columns: columnsResult.rows,
-          primary_keys: pkResult.rows.map(row => row.column_name),
-          foreign_keys: fkResult.rows,
-          indexes: indexesResult.rows
-        }, null, 2)
-      }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              schema_name: schemaName,
+              table_name: tableName,
+              description: tableDescResult.rows[0]?.table_description || null,
+              approximate_row_count:
+                rowCountResult.rows[0]?.approximate_row_count || 0,
+              columns: columnsResult.rows,
+              primary_keys: pkResult.rows.map((row) => row.column_name),
+              foreign_keys: fkResult.rows,
+              indexes: indexesResult.rows,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
       isError: false,
     };
   } finally {
@@ -530,9 +642,9 @@ export async function handleListResources(pool: pg.Pool, resourceBaseUrl: URL) {
   try {
     // Get all tables from the public schema
     const result = await client.query(
-      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'",
     );
-    
+
     return {
       resources: result.rows.map((row) => ({
         uri: new URL(`${row.table_name}/${SCHEMA_PATH}`, resourceBaseUrl).href,
@@ -571,11 +683,12 @@ export async function handleReadResource(pool: pg.Pool, resourceUri: string) {
         table_name = $1
       ORDER BY 
         ordinal_position`,
-      [tableName]
+      [tableName],
     );
-    
+
     // Get primary key information
-    const pkResult = await client.query(`
+    const pkResult = await client.query(
+      `
       SELECT 
         a.attname as column_name
       FROM 
@@ -584,19 +697,21 @@ export async function handleReadResource(pool: pg.Pool, resourceUri: string) {
       WHERE 
         i.indrelid = $1::regclass
         AND i.indisprimary
-    `, [`public.${tableName}`]);
-    
-    const primaryKeys = pkResult.rows.map(row => row.column_name);
-    
+    `,
+      [`public.${tableName}`],
+    );
+
+    const primaryKeys = pkResult.rows.map((row) => row.column_name);
+
     // Format the column information with additional details
-    const formattedColumns = columnsResult.rows.map(column => {
+    const formattedColumns = columnsResult.rows.map((column) => {
       return {
         column_name: column.column_name,
         data_type: column.data_type,
         max_length: column.character_maximum_length,
         default_value: column.column_default,
-        nullable: column.is_nullable === 'YES',
-        is_primary_key: primaryKeys.includes(column.column_name)
+        nullable: column.is_nullable === "YES",
+        is_primary_key: primaryKeys.includes(column.column_name),
       };
     });
 
@@ -606,11 +721,15 @@ export async function handleReadResource(pool: pg.Pool, resourceUri: string) {
         {
           uri: resourceUri,
           mimeType: "application/json",
-          text: JSON.stringify({
-            table_name: tableName,
-            columns: formattedColumns,
-            primary_keys: primaryKeys,
-          }, null, 2),
+          text: JSON.stringify(
+            {
+              table_name: tableName,
+              columns: formattedColumns,
+              primary_keys: primaryKeys,
+            },
+            null,
+            2,
+          ),
         },
       ],
     };

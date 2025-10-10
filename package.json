@@ -20,11 +20,12 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc && shx chmod +x dist/index.js",
-    "check": "tsc --watch",
-    "dev": "env $(cat .env | xargs) pnpm start",
+    "build": "vite build && shx chmod +x dist/index.js",
+    "dev": "env $(cat .env | xargs) vite-node src/index.ts",
+    "preview": "env $(cat .env | xargs) pnpm start",
     "start": "node dist/index.js",
-    "prepare": "pnpm run build"
+    "prepare": "pnpm run build",
+    "type-check": "tsc --noEmit"
   },
   "keywords": [
     "mcp",
@@ -55,9 +56,15 @@
     "@types/node": "^20.11.0",
     "@types/pg": "^8.11.10",
     "shx": "^0.3.4",
-    "typescript": "^5.6.2"
+    "typescript": "^5.6.2",
+    "vite": "^7.1.9",
+    "vite-node": "^3.2.4"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "imports": {
+    "#src/*": "./src/*",
+    "#lib/*": "./src/lib/*"
   }
 }
