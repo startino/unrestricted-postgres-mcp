@@ -89,7 +89,7 @@ export async function handleExecuteRollback(
               null,
               2,
             ) +
-            "\n\nTransaction has been successfully rolled back. No changes have been made to the database.\n\nThank you for using PostgreSQL Full Access MCP Server. Is there anything else you'd like to do with your database?",
+            "\n\nTransaction has been successfully rolled back. No changes have been made to the database.",
         },
       ],
       isError: false,
@@ -233,11 +233,10 @@ export async function handleExecuteDML(
             type: "text",
             text:
               JSON.stringify(resultObj, null, 2) +
-              "\n\nThe SQL statement has been executed successfully and a transaction has been started.\n\nPLEASE REVIEW THE RESULTS ABOVE AND FOLLOW THESE STEPS:\n1. This conversation will now end so you can review the changes carefully\n2. After reviewing, start a new message and:\n   - Type 'Yes' to COMMIT this transaction and save changes permanently\n   - Type 'No' to ROLLBACK this transaction and discard all changes\n\nThe transaction will automatically roll back if not committed within " +
+              "\n\nThe transaction will automatically roll back if not committed within " +
               Math.floor(transactionTimeoutMs / 1000) +
               " seconds.\n\nTransaction ID: " +
-              transactionId +
-              "\n\n*** END OF CONVERSATION ***",
+              transactionId,
           },
         ],
         isError: false,
@@ -427,7 +426,7 @@ export async function handleExecuteCommit(
               null,
               2,
             ) +
-            "\n\nTransaction has been successfully committed. All changes have been saved to the database.\n\nThank you for using PostgreSQL Full Access MCP Server. Is there anything else you'd like to do with your database?",
+            "\n\nTransaction has been successfully committed. All changes have been saved to the database.",
         },
       ],
       isError: false,
@@ -740,10 +739,13 @@ export async function handleReadResource(pool: pg.Pool, resourceUri: string) {
 
 export async function handleListTransactions(
   transactionManager: TransactionManager,
-): Promise<{ content: Array<{ type: "text"; text: string }>; isError: boolean }> {
+): Promise<{
+  content: Array<{ type: "text"; text: string }>;
+  isError: boolean;
+}> {
   try {
     const transactions = transactionManager.getAllTransactions();
-    
+
     if (transactions.length === 0) {
       return {
         content: [
@@ -812,14 +814,15 @@ export async function handleListTransactions(
   }
 }
 
-export async function handleForceRollback(
-  pool: pg.Pool,
-): Promise<{ content: Array<{ type: "text"; text: string }>; isError: boolean }> {
+export async function handleForceRollback(pool: pg.Pool): Promise<{
+  content: Array<{ type: "text"; text: string }>;
+  isError: boolean;
+}> {
   const client = await pool.connect();
   try {
     // Force rollback any aborted transaction
     await client.query("ROLLBACK");
-    
+
     return {
       content: [
         {
@@ -859,9 +862,10 @@ export async function handleForceRollback(
   }
 }
 
-export async function handleResetSession(
-  pool: pg.Pool,
-): Promise<{ content: Array<{ type: "text"; text: string }>; isError: boolean }> {
+export async function handleResetSession(pool: pg.Pool): Promise<{
+  content: Array<{ type: "text"; text: string }>;
+  isError: boolean;
+}> {
   const client = await pool.connect();
   try {
     // Try to rollback first
@@ -870,10 +874,10 @@ export async function handleResetSession(
     } catch (rollbackError) {
       // Ignore rollback errors - we're resetting anyway
     }
-    
+
     // Reset the session to clear any transaction state
     await client.query("DISCARD ALL");
-    
+
     return {
       content: [
         {
@@ -881,7 +885,8 @@ export async function handleResetSession(
           text: JSON.stringify(
             {
               status: "success",
-              message: "Database session reset successfully - all transaction state cleared",
+              message:
+                "Database session reset successfully - all transaction state cleared",
               action: "reset_session",
             },
             null,
@@ -913,14 +918,17 @@ export async function handleResetSession(
   }
 }
 
-export async function handleGetConnectionStatus(
-  pool: pg.Pool,
-): Promise<{ content: Array<{ type: "text"; text: string }>; isError: boolean }> {
+export async function handleGetConnectionStatus(pool: pg.Pool): Promise<{
+  content: Array<{ type: "text"; text: string }>;
+  isError: boolean;
+}> {
   const client = await pool.connect();
   try {
     // Check current transaction status
-    const txStatusResult = await client.query("SELECT txid_current() as current_tx_id, in_transaction() as in_transaction");
-    
+    const txStatusResult = await client.query(
+      "SELECT txid_current() as current_tx_id, in_transaction() as in_transaction",
+    );
+
     // Check if we're in an aborted state by trying a simple query
     let abortedState = false;
     try {
@@ -930,7 +938,7 @@ export async function handleGetConnectionStatus(
         abortedState = true;
       }
     }
-    
+
     // Get session info
     const sessionResult = await client.query(`
       SELECT 
@@ -939,7 +947,7 @@ export async function handleGetConnectionStatus(
         current_schema() as current_schema,
         version() as postgres_version
     `);
-    
+
     return {
       content: [
         {
@@ -986,3 +994,4 @@ export async function handleGetConnectionStatus(
     safelyReleaseClient(client);
   }
 }
+
