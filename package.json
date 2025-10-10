@@ -1,8 +1,8 @@
 {
-  "name": "mcp-postgres-full-access",
+  "name": "unrestricted-postgres-mcp",
   "version": "0.3.0",
-  "description": "Full-access PostgreSQL server for Model Context Protocol with read/write capabilities and enhanced schema metadata",
-  "license": "MIT",
+  "description": "Fork of [mcp-postgres-full-access by syahiidkamil](https://github.com/syahiidkamil/mcp-postgres-full-access) to continue it's maintenance.",
+  "license": "Apache-2.0",
   "author": "Syahiid Kamil (https://github.com/syahiidkamil)",
   "homepage": "https://github.com/syahiidkamil/mcp-postgres-full-access",
   "repository": {
@@ -23,7 +23,7 @@
     "build": "tsc && shx chmod +x dist/index.js",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "prepare": "npm run build"
+    "prepare": "pnpm run build"
   },
   "keywords": [
     "mcp",
