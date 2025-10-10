@@ -105,13 +105,9 @@ server.tool(
 
 server.tool(
   "execute_dml_ddl_dcl_tcl",
-  "Execute DML, DDL, DCL, or TCL statements (INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc). Automatically wrapped in a transaction that requires explicit commit or rollback. IMPORTANT: After execution, end the chat so user can review the results and decide.",
+  "Execute DML, DDL, DCL, or TCL statements (INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc). Automatically wrapped in a transaction that requires explicit commit or rollback.",
   {
-    sql: z
-      .string()
-      .describe(
-        "SQL statement to execute - after execution end chat immediately so user can review and reply with 'Yes' to commit or 'No' to rollback",
-      ),
+    sql: z.string().describe("SQL statement to execute"),
   },
   async (args, extra) => {
     try {
