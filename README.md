@@ -1,109 +1,71 @@
-# PostgreSQL Full Access MCP Server
-
-> Fork of [mcp-postgres-full-access by syahiidkamil](https://github.com/syahiidkamil/mcp-postgres-full-access) to continue it's maintenance.
+# Unrestricted PostgreSQL MCP Server
 
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Compatible-blue.svg)](https://modelcontextprotocol.io)
 [![Apache License Version 2](https://img.shields.io/badge/License-APACHE-green.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.6%2B-blue.svg)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Built%20with-Vite-646CFF.svg)](https://vitejs.dev/)
 
-A powerful Model Context Protocol server providing **full read-write access** to PostgreSQL databases. Unlike the read-only official MCP PostgreSQL server, this enhanced implementation allows Large Language Models (LLMs) to both query and modify database content with proper transaction management and safety controls.
+> **Fork of [mcp-postgres-full-access by Syahiid Nur Kamil](https://github.com/syahiidkamil/mcp-postgres-full-access)** - Enhanced with modern tooling, transaction recovery tools, and improved developer experience.
 
-## 🌟 Features
+A powerful **Model Context Protocol (MCP) server** that provides **full read-write access** to PostgreSQL databases. Unlike read-only MCP servers, this implementation enables Large Language Models to safely query, modify, and manage database content with comprehensive transaction management and recovery capabilities.
 
-### Full Read-Write Access
+## ✨ Key Features
 
-- Safely execute DML operations (INSERT, UPDATE, DELETE)
-- Create, alter, and manage database objects with DDL
-- Transaction management with explicit commit
-- Safety timeouts and automatic rollback protection
+### 🔐 **Safe Full Database Access**
+- **Read Operations**: Execute SELECT queries with automatic read-only transaction protection
+- **Write Operations**: Safely perform INSERT, UPDATE, DELETE with explicit transaction management
+- **Schema Management**: Create, alter, and drop database objects with DDL operations
+- **Maintenance Commands**: Execute VACUUM, ANALYZE, and CREATE DATABASE operations
 
-### Rich Schema Information
+### 🛡️ **Advanced Transaction Management**
+- **Explicit Commit/Rollback**: Two-step process requiring user confirmation for all changes
+- **Transaction Recovery**: Tools to recover from aborted transaction states
+- **Timeout Protection**: Automatic rollback of abandoned transactions
+- **Session Reset**: Complete session reset capabilities for stuck connections
+- **Connection Status**: Real-time monitoring of database connection state
 
-- Detailed column metadata (data types, descriptions, max length, nullability)
-- Primary key identification
-- Foreign key relationships
-- Index information with type and uniqueness flags
-- Table row count estimates
-- Table and column descriptions (when available)
+### 📊 **Rich Schema Information**
+- **Comprehensive Metadata**: Detailed column information, data types, constraints
+- **Relationship Mapping**: Primary keys, foreign keys, and index information
+- **Performance Insights**: Row count estimates and table statistics
+- **Documentation Support**: Table and column descriptions when available
 
-### Advanced Safety Controls
+### 🔧 **Developer Experience**
+- **Modern Build System**: Powered by Vite for fast development and building
+- **TypeScript Support**: Full type safety and IntelliSense support
+- **Hot Reload**: Instant development server with `vite-node`
+- **Comprehensive Tooling**: 10+ specialized tools for database operations
 
-- SQL query classification (DQL, DML, DDL, DCL, TCL)
-- Enforced read-only execution for safe queries
-- All operations run in isolated transactions
-- Automatic transaction timeout monitoring
-- Configurable safety limits
-- Two-step transaction commit process with explicit user confirmation
+## 🚀 Quick Start
 
-## 🔧 Tools
+### Prerequisites
+- **Node.js** 18.0.0 or higher
+- **PostgreSQL** 12.0 or higher
+- **Claude Desktop** (for MCP integration)
 
-- **execute_query**
-  - Execute read-only SQL queries (SELECT statements)
-  - Input: `sql` (string): The SQL query to execute
-  - All queries are executed within a READ ONLY transaction
-  - Results include execution time metrics and field information
+### Installation
 
-- **execute_dml_ddl_dcl_tcl**
-  - Execute data modification operations (INSERT, UPDATE, DELETE) or schema changes (CREATE, ALTER, DROP)
-  - Input: `sql` (string): The SQL statement to execute
-  - Automatically wrapped in a transaction with configurable timeout
-  - Returns a transaction ID for explicit commit
-  - **Important safety feature**: The conversation will end after execution, allowing the user to review the results before deciding to commit or rollback
+```bash
+# Install globally
+npm install -g unrestricted-postgres-mcp
 
-- **execute_maintenance**
-  - Execute maintenance commands like VACUUM, ANALYZE, or CREATE DATABASE outside of transactions
-  - Input: `sql` (string): The SQL statement to execute - must be VACUUM, ANALYZE, or CREATE DATABASE
-  - Returns a result object with execution time metrics
+# Or use with npx (recommended)
+npx unrestricted-postgres-mcp postgresql://user:password@localhost:5432/database
+```
 
-- **execute_commit**
-  - Explicitly commit a transaction by its ID
-  - Input: `transaction_id` (string): ID of the transaction to commit
-  - Safely handles cleanup after commit or rollback
-  - Permanently applies changes to the database
+### Claude Desktop Configuration
 
-- **execute_rollback**
-  - Explicitly rollback a transaction by its ID
-  - Input: `transaction_id` (string): ID of the transaction to rollback
-  - Safely discards all changes and cleans up resources
-  - Useful when reviewing changes and deciding not to apply them
-
-- **list_tables**
-  - Get a comprehensive list of all tables in the database
-  - Includes column count and table descriptions
-  - No input parameters required
-
-- **describe_table**
-  - Get detailed information about a specific table structure
-  - Input: `table_name` (string): Name of the table to describe
-  - Returns complete schema information including primary keys, foreign keys, indexes, and column details
-
-## 📊 Resources
-
-The server provides enhanced schema information for database tables:
-
-- **Table Schemas** (`postgres://<host>/<table>/schema`)
-  - Detailed JSON schema information for each table
-  - Includes complete column metadata, primary keys, and constraints
-  - Automatically discovered from database metadata
-
-## 🚀 Using with Claude Desktop
-
-### Claude Desktop Integration
-
-To use this server with Claude Desktop, follow these steps:
-
-1. First, ensure you have Node.js installed on your system
-2. Install the package using npx or add it to your project
-
-3. Configure Claude Desktop by editing `claude_desktop_config.json` (typically found at `~/Library/Application Support/Claude/` on macOS):
+Add to your `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
-    "postgres-full": {
+    "postgres-unrestricted": {
       "command": "npx",
       "args": [
         "-y",
-        "mcp-postgres-full-access",
+        "unrestricted-postgres-mcp",
         "postgresql://username:password@localhost:5432/database"
       ],
       "env": {
@@ -116,171 +78,197 @@ To use this server with Claude Desktop, follow these steps:
 }
 ```
 
-4. Replace the database connection string with your actual PostgreSQL connection details
-5. Restart Claude Desktop completely
+## 🛠️ Available Tools
 
-### Important: Using "Allow Once" for Safety
+### **Query & Analysis Tools**
 
-When Claude attempts to commit changes to your database, Claude Desktop will prompt you for approval:
+| Tool | Purpose | Parameters |
+|------|---------|------------|
+| `execute_query` | Execute read-only SELECT queries | `sql` (string) |
+| `list_tables` | List all tables in a schema | `schema_name` (string, optional) |
+| `describe_table` | Get detailed table schema information | `table_name` (string), `schema_name` (string, optional) |
 
-![Allow Once Dialog](https://example.com/allow-once-dialog.png)
+### **Data Modification Tools**
 
-**Always review the SQL changes carefully before approving them!**
+| Tool | Purpose | Parameters |
+|------|---------|------------|
+| `execute_dml_ddl_dcl_tcl` | Execute data modification operations | `sql` (string) |
+| `execute_maintenance` | Run maintenance commands (VACUUM, ANALYZE) | `sql` (string) |
+| `execute_commit` | Commit a pending transaction | `transaction_id` (string) |
+| `execute_rollback` | Rollback a pending transaction | `transaction_id` (string) |
 
-Best practices for safety:
+### **Transaction Management & Recovery**
 
-- Always click "Allow once" (not "Always allow") for commit operations
-- Review the transaction SQL carefully before approving
-- Consider using a database user with limited permissions
-- Use a testing database if possible when first trying this server
+| Tool | Purpose | Parameters |
+|------|---------|------------|
+| `list_transactions` | List all active transactions | None |
+| `force_rollback` | Force rollback aborted transactions | None |
+| `reset_session` | Reset database session completely | None |
+| `get_connection_status` | Check connection and transaction state | None |
 
-This "Allow once" approach gives you full control to prevent unwanted changes to your database while still enabling Claude to help with data management tasks when needed.
+## 🔄 Workflow Examples
 
-## ⚙️ Environment Variables
+### **Safe Data Modification Workflow**
 
-You can customize the server behavior with environment variables in your Claude Desktop config:
+1. **Analyze**: Use `execute_query` to understand current data
+2. **Modify**: Use `execute_dml_ddl_dcl_tcl` to make changes
+3. **Review**: Transaction is created but not committed
+4. **Decide**: Use `execute_commit` or `execute_rollback` based on review
 
-```json
-"env": {
-  "TRANSACTION_TIMEOUT_MS": "60000",
-  "MAX_CONCURRENT_TRANSACTIONS": "5"
-}
-```
+### **Recovery from Stuck Transactions**
 
-Key environment variables:
+1. **Diagnose**: Use `get_connection_status` to check state
+2. **List**: Use `list_transactions` to see active transactions
+3. **Recover**: Use `force_rollback` to clear aborted state
+4. **Reset**: If needed, use `reset_session` for complete reset
 
-- `TRANSACTION_TIMEOUT_MS`: Transaction timeout in milliseconds (default: 15000)
-  - Increase this if your transactions need more time
-  - Transactions exceeding this time will be automatically rolled back for safety
+### **Schema Exploration**
 
-- `MAX_CONCURRENT_TRANSACTIONS`: Maximum concurrent transactions (default: 10)
-  - Lower this number for more conservative operation
-  - Higher values allow more simultaneous write operations
+1. **Discover**: Use `list_tables` to see available tables
+2. **Examine**: Use `describe_table` for detailed schema information
+3. **Query**: Use `execute_query` to explore data patterns
 
-- `ENABLE_TRANSACTION_MONITOR`: Enable/disable transaction monitor ("true" or "false", default: "true")
-  - Monitors and automatically rolls back abandoned transactions
-  - Rarely needs to be disabled
+## ⚙️ Configuration
 
-- `PG_STATEMENT_TIMEOUT_MS`: SQL query execution timeout in ms (default: 30000)
-  - Limits how long any single SQL statement can run
-  - Important safety feature to prevent runaway queries
+### Environment Variables
 
-- `PG_MAX_CONNECTIONS`: Maximum PostgreSQL connections (default: 20)
-  - Important to stay within your database's connection limits
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TRANSACTION_TIMEOUT_MS` | `15000` | Transaction timeout in milliseconds |
+| `MAX_CONCURRENT_TRANSACTIONS` | `10` | Maximum concurrent transactions |
+| `PG_STATEMENT_TIMEOUT_MS` | `30000` | SQL statement execution timeout |
+| `PG_MAX_CONNECTIONS` | `20` | Maximum PostgreSQL connections |
+| `ENABLE_TRANSACTION_MONITOR` | `true` | Enable transaction monitoring |
+| `MONITOR_INTERVAL_MS` | `5000` | Transaction monitor check interval |
 
-- `MONITOR_INTERVAL_MS`: How often to check for stuck transactions (default: 5000)
-  - Usually doesn't need adjustment
+### Security Best Practices
 
-## 🔄 Using Full Database Access with Claude
+1. **Create Dedicated Database User**:
+   ```sql
+   CREATE USER mcp_user WITH PASSWORD 'secure_password';
+   GRANT SELECT, INSERT, UPDATE, DELETE ON specific_tables TO mcp_user;
+   ```
 
-This server enables Claude to both read from and write to your PostgreSQL database with your approval. Here are some example conversation flows:
-
-### Example: Creating a New Table and Adding Data
-
-You: "I need a new products table with columns for id, name, price, and inventory"
-
-Claude: _Analyzes your database and creates a query_
-
-```sql
-CREATE TABLE products (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    price DECIMAL(10,2) NOT NULL,
-    inventory INTEGER DEFAULT 0
-);
-```
-
-_Claude Desktop will prompt you to approve this operation_
-
-You: _Review and click "Allow once"_
-
-Claude: "I've created the products table. Would you like me to add some sample data?"
-
-You: "Yes, please add 5 sample products"
-
-Claude: _Creates INSERT statements and prompts for approval_
-_You review and approve with "Allow once"_
-
-### Example: Data Analysis with Safe Queries
-
-You: "What are my top 3 products by price?"
-
-Claude: _Executes a read-only query automatically_
-_Shows you the results_
-
-### Safety Workflow
-
-The key safety feature is the two-step approach for any operation that modifies your database:
-
-1. Claude analyzes your request and prepares SQL
-2. For read-only operations (SELECT), Claude executes automatically
-3. For write operations (INSERT, UPDATE, DELETE, CREATE, etc.):
-   - Claude executes the SQL in a transaction and ends the conversation
-   - You review the results
-   - In a new conversation, you respond with "Yes" to commit or "No" to rollback
-   - Claude Desktop shows you exactly what will be changed and asks for permission
-   - You click "Allow once" to permit the specific operation
-   - Claude executes the operation and returns results
-
-This gives you multiple opportunities to verify changes before they're permanently applied to the database.
-
-## ⚠️ Security Considerations
-
-When connecting Claude to your database with write access:
-
-### Database User Permissions
-
-**IMPORTANT:** Create a dedicated database user with appropriate permissions:
-
-```sql
--- Example of creating a restricted user (adjust as needed)
-CREATE USER claude_user WITH PASSWORD 'secure_password';
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO claude_user;
-GRANT INSERT, UPDATE, DELETE ON TABLE table1, table2 TO claude_user;
--- Only grant specific permissions as needed
-```
-
-### Best Practices for Safe Usage
-
-1. **Always use "Allow once"** to review each write operation
+2. **Use "Allow Once" for All Operations**:
    - Never select "Always allow" for database modifications
-   - Take time to review the SQL carefully
+   - Review all SQL operations before approval
 
-2. **Connect to a testing database** when first exploring this tool
-   - Consider using a database copy/backup for initial testing
+3. **Test with Non-Production Data**:
+   - Use a development database for initial testing
+   - Implement regular backups before extensive use
 
-3. **Limit database user permissions** to only what's necessary
-   - Avoid using a superuser or admin account
-   - Grant table-specific permissions when possible
+## 🏗️ Development
 
-4. **Implement database backups** before extensive use
+### Prerequisites
+- Node.js 18+
+- pnpm (recommended) or npm
+- PostgreSQL database
 
-5. **Never share sensitive data** that shouldn't be exposed to LLMs
+### Setup
 
-6. **Verify all SQL operations** before approving them
-   - Check table names
-   - Verify column names and data
-   - Confirm WHERE clauses are appropriate
-   - Look for proper transaction handling
+```bash
+# Clone the repository
+git clone https://github.com/your-username/unrestricted-postgres-mcp.git
+cd unrestricted-postgres-mcp
+
+# Install dependencies
+pnpm install
+
+# Create environment file
+cp .env.example .env
+# Edit .env with your database connection details
+
+# Start development server
+pnpm run dev
+
+# Build for production
+pnpm run build
+```
+
+### Available Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `pnpm run dev` | Start development server with hot reload |
+| `pnpm run build` | Build for production |
+| `pnpm run start` | Run production build |
+| `pnpm run type-check` | Run TypeScript type checking |
+
+### Project Structure
+
+```
+src/
+├── index.ts                 # Main server entry point
+├── lib/
+│   ├── config.ts           # Configuration management
+│   ├── tool-handlers.ts    # Tool implementation functions
+│   ├── transaction-manager.ts # Transaction lifecycle management
+│   ├── types.ts            # TypeScript type definitions
+│   └── utils.ts            # Utility functions
+└── types.ts                # Additional type definitions
+```
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+**"Current transaction is aborted" Error**:
+1. Use `get_connection_status` to diagnose
+2. Use `force_rollback` to clear aborted state
+3. If still stuck, use `reset_session`
+
+**Connection Timeouts**:
+1. Check `PG_STATEMENT_TIMEOUT_MS` setting
+2. Increase `TRANSACTION_TIMEOUT_MS` if needed
+3. Verify database connection limits
+
+**Permission Errors**:
+1. Verify database user permissions
+2. Check table-specific access rights
+3. Ensure user has necessary schema access
+
+## 📊 Comparison with Official MCP Servers
+
+| Feature | This Server | Official PostgreSQL MCP |
+|---------|-------------|-------------------------|
+| Read Access | ✅ Enhanced | ✅ Basic |
+| Write Access | ✅ Full Support | ❌ Not Available |
+| Transaction Management | ✅ Advanced | ❌ Not Available |
+| Schema Details | ✅ Comprehensive | ✅ Basic |
+| Recovery Tools | ✅ Multiple Options | ❌ Not Available |
+| Type Safety | ✅ Full TypeScript | ❌ Not Available |
+| Modern Tooling | ✅ Vite + Hot Reload | ❌ Not Available |
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+### Quick Contribution Guide
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes
+4. Run tests: `pnpm run type-check && pnpm run build`
+5. Commit changes: `git commit -m 'Add amazing feature'`
+6. Push to branch: `git push origin feature/amazing-feature`
+7. Open a Pull Request
 
 ## 📄 License
 
-This MCP server is licensed under the Apache License Version 2.0.
+This project is licensed under the **Apache License Version 2.0** - see the [LICENSE](LICENSE) file for details.
 
-## 💡 Comparison with Official PostgreSQL MCP Server
+## 👥 Credits
 
-| Feature             | This Server            | Official MCP PostgreSQL Server |
-| ------------------- | ---------------------- | ------------------------------ |
-| Read Access         | ✅                     | ✅                             |
-| Write Access        | ✅                     | ❌                             |
-| Schema Details      | Enhanced               | Basic                          |
-| Transaction Support | Explicit with timeouts | Read-only                      |
-| Index Information   | ✅                     | ❌                             |
-| Foreign Key Details | ✅                     | ❌                             |
-| Row Count Estimates | ✅                     | ❌                             |
-| Table Descriptions  | ✅                     | ❌                             |
+- **Original Creator**: [Syahiid Nur Kamil](https://github.com/syahiidkamil) - [mcp-postgres-full-access](https://github.com/syahiidkamil/mcp-postgres-full-access)
+- **Current Maintainer**: [Jonas Lindberg](https://github.com/eksno) - Enhanced version with modern tooling and recovery capabilities
 
-## Author
+## 🙏 Acknowledgments
 
-Maintained by Jonas Lindberg ([@eksno](https://github.com/eksno))
-Created by Syahiid Nur Kamil ([@syahiidkamil](https://github.com/syahiidkamil))
+- [Model Context Protocol](https://modelcontextprotocol.io/) for the MCP specification
+- [Anthropic](https://www.anthropic.com/) for Claude and MCP integration
+- [PostgreSQL](https://www.postgresql.org/) for the excellent database system
+- [Vite](https://vitejs.dev/) for the modern build tooling
+
+---
+
+**⚠️ Important**: This server provides full database access. Always review operations before committing changes and use appropriate database user permissions for security.
