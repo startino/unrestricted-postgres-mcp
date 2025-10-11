@@ -1,20 +1,29 @@
 {
   "name": "unrestricted-postgres-mcp",
   "version": "0.3.0",
-  "description": "Fork of [mcp-postgres-full-access by syahiidkamil](https://github.com/syahiidkamil/mcp-postgres-full-access) to continue it's maintenance.",
+  "description": "Enhanced PostgreSQL MCP Server with full read-write access, transaction recovery, and modern tooling. Fork of mcp-postgres-full-access by Syahiid Nur Kamil.",
   "license": "Apache-2.0",
-  "author": "Syahiid Kamil (https://github.com/syahiidkamil)",
-  "homepage": "https://github.com/syahiidkamil/mcp-postgres-full-access",
+  "author": {
+    "name": "Jonas Lindberg",
+    "url": "https://github.com/eksno"
+  },
+  "contributors": [
+    {
+      "name": "Syahiid Nur Kamil",
+      "url": "https://github.com/syahiidkamil"
+    }
+  ],
+  "homepage": "https://github.com/eksno/unrestricted-postgres-mcp",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/syahiidkamil/mcp-postgres-full-access.git"
+    "url": "git+https://github.com/eksno/unrestricted-postgres-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/syahiidkamil/mcp-postgres-full-access/issues"
+    "url": "https://github.com/eksno/unrestricted-postgres-mcp/issues"
   },
   "type": "module",
   "bin": {
-    "mcp-postgres-full-access": "dist/index.js"
+    "unrestricted-postgres-mcp": "dist/index.js"
   },
   "files": [
     "dist"
