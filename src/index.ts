@@ -20,7 +20,6 @@ import {
   handleListTransactions,
   handleForceRollback,
   handleResetSession,
-  handleGetConnectionStatus,
 } from "./lib/tool-handlers";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
@@ -434,27 +433,6 @@ server.tool(
   },
 );
 
-server.tool(
-  "get_connection_status",
-  "Check the current database connection status including transaction state, aborted state, and session information. Useful for debugging connection issues.",
-  {},
-  async (args, extra) => {
-    try {
-      const result = await handleGetConnectionStatus(pool);
-      return transformHandlerResponse(result);
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: error instanceof Error ? error.message : String(error),
-          },
-        ],
-        isError: true,
-      };
-    }
-  },
-);
 
 // Register resources using the new API
 // First, create a resource template for table schemas

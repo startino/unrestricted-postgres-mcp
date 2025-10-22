@@ -104,7 +104,6 @@ Add to your `claude_desktop_config.json`:
 | `list_transactions` | List all active transactions | None |
 | `force_rollback` | Force rollback aborted transactions | None |
 | `reset_session` | Reset database session completely | None |
-| `get_connection_status` | Check connection and transaction state | None |
 
 ## 🔄 Workflow Examples
 
@@ -117,7 +116,7 @@ Add to your `claude_desktop_config.json`:
 
 ### **Recovery from Stuck Transactions**
 
-1. **Diagnose**: Use `get_connection_status` to check state
+1. **Diagnose**: Use `list_transactions` to check state
 2. **List**: Use `list_transactions` to see active transactions
 3. **Recover**: Use `force_rollback` to clear aborted state
 4. **Reset**: If needed, use `reset_session` for complete reset
@@ -213,7 +212,7 @@ src/
 ### Common Issues
 
 **"Current transaction is aborted" Error**:
-1. Use `get_connection_status` to diagnose
+1. Use `list_transactions` to diagnose
 2. Use `force_rollback` to clear aborted state
 3. If still stuck, use `reset_session`
 

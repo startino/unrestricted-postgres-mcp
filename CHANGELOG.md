@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Transaction recovery tools (`force_rollback`, `reset_session`, `get_connection_status`)
+- Transaction recovery tools (`force_rollback`, `reset_session`)
 - `list_transactions` tool for monitoring active transactions
 - Modern Vite-based build system with hot reload
 - TypeScript support with full type safety
