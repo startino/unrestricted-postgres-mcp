@@ -30,7 +30,7 @@
   ],
   "scripts": {
     "build": "vite build && shx chmod +x dist/index.js",
-    "dev": "env $(cat .env | xargs) vite-node src/index.ts",
+    "dev": "env $(cat .env | xargs) vite-node src/index.ts --watch",
     "preview": "env $(cat .env | xargs) pnpm start",
     "start": "node dist/index.js",
     "prepare": "pnpm run build",
