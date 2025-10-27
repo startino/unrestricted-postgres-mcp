@@ -890,7 +890,7 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
       FROM information_schema.tables t
       LEFT JOIN information_schema.columns c ON t.table_name = c.table_name AND t.table_schema = c.table_schema
       LEFT JOIN information_schema.table_constraints tc ON t.table_name = tc.table_name AND t.table_schema = tc.table_schema
-      LEFT JOIN pg_indexes i ON t.table_name = i.tablename
+      LEFT JOIN pg_indexes i ON t.table_name = i.tablename AND i.schemaname = t.table_schema
       WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE'
       ORDER BY t.table_name, c.ordinal_position, tc.constraint_name, i.indexname;
     `;
@@ -950,16 +950,17 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
       SELECT 
         schemaname,
         tablename,
-        n_tup_ins as inserts,
-        n_tup_upd as updates,
-        n_tup_del as deletes,
-        n_live_tuples,
-        n_dead_tuples,
+        COALESCE(n_tup_ins, 0) as inserts,
+        COALESCE(n_tup_upd, 0) as updates,
+        COALESCE(n_tup_del, 0) as deletes,
+        COALESCE(n_live_tup, 0) as live_tuples,
+        COALESCE(n_dead_tup, 0) as dead_tuples,
         last_vacuum,
         last_autovacuum,
         last_analyze,
         last_autoanalyze
       FROM pg_stat_user_tables
+      WHERE schemaname = 'public'
       ORDER BY tablename;
     `;
 
