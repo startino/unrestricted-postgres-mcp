@@ -863,14 +863,10 @@ export async function handleResetSession(pool: pg.Pool): Promise<{
   }
 }
 
-
-import pg from "pg";
-import { safelyReleaseClient } from "./utils";
-
 export async function handleGetDatabaseSchema(pool: pg.Pool) {
   const client = await pool.connect();
   try {
-    // Get all tables with their columns, types, constraints, and indexes
+    // Get all tables with their columns, types, and constraints
     const tablesQuery = `
       SELECT 
         t.table_name,
@@ -884,18 +880,34 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
         c.numeric_scale,
         c.ordinal_position,
         tc.constraint_name,
-        tc.constraint_type,
-        i.indexname,
-        i.indexdef
+        tc.constraint_type
       FROM information_schema.tables t
       LEFT JOIN information_schema.columns c ON t.table_name = c.table_name AND t.table_schema = c.table_schema
       LEFT JOIN information_schema.table_constraints tc ON t.table_name = tc.table_name AND t.table_schema = tc.table_schema
-      LEFT JOIN pg_indexes i ON t.table_name = i.tablename AND i.schemaname = t.table_schema
       WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE'
-      ORDER BY t.table_name, c.ordinal_position, tc.constraint_name, i.indexname;
+      ORDER BY t.table_name, c.ordinal_position, tc.constraint_name;
     `;
 
     const tablesResult = await client.query(tablesQuery);
+
+    // Get indexes separately - wrap in try-catch in case of permission issues
+    let indexesResult;
+    try {
+      const indexesQuery = `
+        SELECT 
+          schemaname,
+          tablename,
+          indexname,
+          indexdef
+        FROM pg_indexes
+        WHERE schemaname = 'public'
+        ORDER BY tablename, indexname;
+      `;
+      indexesResult = await client.query(indexesQuery);
+    } catch (indexError: any) {
+      console.error("Failed to fetch indexes:", indexError.message);
+      indexesResult = { rows: [] };
+    }
 
     // Get foreign key relationships using PostgreSQL system tables
     const foreignKeysQuery = `
@@ -945,26 +957,31 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
 
     const functionsResult = await client.query(functionsQuery);
 
-    // Get table statistics
-    const statsQuery = `
-      SELECT 
-        schemaname,
-        tablename,
-        COALESCE(n_tup_ins, 0) as inserts,
-        COALESCE(n_tup_upd, 0) as updates,
-        COALESCE(n_tup_del, 0) as deletes,
-        COALESCE(n_live_tup, 0) as live_tuples,
-        COALESCE(n_dead_tup, 0) as dead_tuples,
-        last_vacuum,
-        last_autovacuum,
-        last_analyze,
-        last_autoanalyze
-      FROM pg_stat_user_tables
-      WHERE schemaname = 'public'
-      ORDER BY tablename;
-    `;
-
-    const statsResult = await client.query(statsQuery);
+    // Get table statistics - wrap in try-catch in case of permission issues
+    let statsResult;
+    try {
+      const statsQuery = `
+        SELECT 
+          schemaname,
+          tablename,
+          COALESCE(n_tup_ins, 0) as inserts,
+          COALESCE(n_tup_upd, 0) as updates,
+          COALESCE(n_tup_del, 0) as deletes,
+          COALESCE(n_live_tup, 0) as live_tuples,
+          COALESCE(n_dead_tup, 0) as dead_tuples,
+          last_vacuum,
+          last_autovacuum,
+          last_analyze,
+          last_autoanalyze
+        FROM pg_stat_user_tables
+        WHERE schemaname = 'public'
+        ORDER BY tablename;
+      `;
+      statsResult = await client.query(statsQuery);
+    } catch (statsError: any) {
+      console.error("Failed to fetch statistics:", statsError.message);
+      statsResult = { rows: [] };
+    }
 
     // Organize the data
     const tables: any = {};
@@ -1003,12 +1020,17 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
           constraint_type: row.constraint_type
         });
       }
+    });
 
-      if (row.indexname && !tables[row.table_name].indexes.find((i: any) => i.indexname === row.indexname)) {
-        tables[row.table_name].indexes.push({
-          indexname: row.indexname,
-          indexdef: row.indexdef
-        });
+    // Process indexes separately
+    indexesResult.rows.forEach((row: any) => {
+      if (tables[row.tablename]) {
+        if (!tables[row.tablename].indexes.find((i: any) => i.indexname === row.indexname)) {
+          tables[row.tablename].indexes.push({
+            indexname: row.indexname,
+            indexdef: row.indexdef
+          });
+        }
       }
     });
 
@@ -1101,7 +1123,7 @@ export async function handleSearchText(
   searchTerm: string,
   tables?: string[],
   columns?: string[],
-  limit: number = 100
+  limit: number = 5
 ) {
   const client = await pool.connect();
   try {
