@@ -577,7 +577,7 @@ app.post("/mcp", async (req, res) => {
 const port = parseInt(process.env.PORT || "3000");
 app
   .listen(port, () => {
-    console.log(`MCP Server running on http://localhost:${port}/mcp`);
+    console.error(`MCP Server running on http://localhost:${port}/mcp`);
   })
   .on("error", (error) => {
     console.error("Server error:", error);

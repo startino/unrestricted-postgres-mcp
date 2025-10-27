@@ -355,11 +355,11 @@ export async function handleListTables(
       JOIN 
         pg_catalog.pg_class pgc ON t.table_name = pgc.relname
       WHERE 
-        t.table_schema = '${schemaName}'
+        t.table_schema = $1
         AND t.table_type = 'BASE TABLE'
       ORDER BY 
         t.table_name
-    `);
+    `, [schemaName]);
 
     return {
       content: [
@@ -403,11 +403,11 @@ export async function handleDescribeTable(
       JOIN 
         pg_class ON pg_class.relname = columns.table_name
       WHERE 
-        columns.table_name = '${tableName}'
-        AND columns.table_schema = '${schemaName}'
+        columns.table_name = $1
+        AND columns.table_schema = $2
       ORDER BY 
         ordinal_position
-    `);
+    `, [tableName, schemaName]);
 
     // Get primary key information
     const pkResult = await client.query(`
@@ -417,9 +417,9 @@ export async function handleDescribeTable(
         pg_index i
         JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
       WHERE 
-        i.indrelid = '${schemaName}.${tableName}'::regclass
+        i.indrelid = $1::regclass
         AND i.indisprimary
-    `);
+    `, [`${schemaName}.${tableName}`]);
 
     // Get foreign key information
     const fkResult = await client.query(`
@@ -435,22 +435,22 @@ export async function handleDescribeTable(
         JOIN information_schema.constraint_column_usage AS ccu
           ON ccu.constraint_name = tc.constraint_name
           AND ccu.table_schema = tc.table_schema
-      WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_name = '${tableName}' AND tc.table_schema = '${schemaName}'
-    `);
+      WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_name = $1 AND tc.table_schema = $2
+    `, [tableName, schemaName]);
 
     // Get table description
     const tableDescResult = await client.query(`
       SELECT pg_catalog.obj_description(pgc.oid, 'pg_class') as table_description
       FROM pg_catalog.pg_class pgc
-      WHERE pgc.relname = '${tableName}' AND pgc.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '${schemaName}')
-    `);
+      WHERE pgc.relname = $1 AND pgc.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)
+    `, [tableName, schemaName]);
 
     // Get approximate row count
     const rowCountResult = await client.query(`
       SELECT reltuples::bigint AS approximate_row_count
       FROM pg_class
-      WHERE relname = '${tableName}' AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '${schemaName}')
-    `);
+      WHERE relname = $1 AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)
+    `, [tableName, schemaName]);
 
     // Get indexes
     const indexesResult = await client.query(`
@@ -472,14 +472,14 @@ export async function handleDescribeTable(
         AND a.attnum = ANY(ix.indkey)
         AND i.relam = am.oid
         AND t.relkind = 'r'
-        AND t.relname = '${tableName}' AND t.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '${schemaName}')
+        AND t.relname = $1 AND t.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)
       GROUP BY
         i.relname,
         am.amname,
         ix.indisunique
       ORDER BY
         i.relname
-    `);
+    `, [tableName, schemaName]);
 
     return {
       content: [
@@ -1059,18 +1059,28 @@ export async function handleSearchText(
     `;
 
     if (tables && tables.length > 0) {
-      const tableList = tables.map(t => `'${t}'`).join(',');
-      tablesQuery += ` AND t.table_name IN (${tableList})`;
+      const placeholders = tables.map((_, i) => `$${i + 2}`).join(',');
+      tablesQuery += ` AND t.table_name IN (${placeholders})`;
     }
 
     if (columns && columns.length > 0) {
-      const columnList = columns.map(c => `'${c}'`).join(',');
-      tablesQuery += ` AND c.column_name IN (${columnList})`;
+      const startIndex = 2 + (tables ? tables.length : 0);
+      const placeholders = columns.map((_, i) => `$${startIndex + i}`).join(',');
+      tablesQuery += ` AND c.column_name IN (${placeholders})`;
     }
 
     tablesQuery += ` ORDER BY t.table_name, c.column_name`;
 
-    const tablesResult = await client.query(tablesQuery);
+    // Build parameters array
+    const queryParams = [];
+    if (tables && tables.length > 0) {
+      queryParams.push(...tables);
+    }
+    if (columns && columns.length > 0) {
+      queryParams.push(...columns);
+    }
+
+    const tablesResult = await client.query(tablesQuery, queryParams);
 
     if (tablesResult.rows.length === 0) {
       return {
@@ -1098,39 +1108,47 @@ export async function handleSearchText(
       const tableName = row.table_name;
       const columnName = row.column_name;
       
+      // Validate table and column names to prevent SQL injection
+      const validTableName = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName) ? tableName : null;
+      const validColumnName = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(columnName) ? columnName : null;
+      
+      if (!validTableName || !validColumnName) {
+        continue; // Skip invalid table/column names
+      }
+
       // Use PostgreSQL's full-text search with ranking
       const searchQuery = `
         SELECT 
-          '${tableName}' as table_name,
-          '${columnName}' as column_name,
-          ${columnName} as column_value,
-          ts_rank(to_tsvector('english', ${columnName}), plainto_tsquery('english', $1)) as rank,
-          ts_headline('english', ${columnName}, plainto_tsquery('english', $1), 'MaxWords=50, MinWords=10') as headline
-        FROM ${tableName}
-        WHERE to_tsvector('english', ${columnName}) @@ plainto_tsquery('english', $1)
+          $2 as table_name,
+          $3 as column_name,
+          ${validColumnName} as column_value,
+          ts_rank(to_tsvector('english', ${validColumnName}), plainto_tsquery('english', $1)) as rank,
+          ts_headline('english', ${validColumnName}, plainto_tsquery('english', $1), 'MaxWords=50, MinWords=10') as headline
+        FROM ${validTableName}
+        WHERE to_tsvector('english', ${validColumnName}) @@ plainto_tsquery('english', $1)
         ORDER BY rank DESC
-        LIMIT ${limit}
+        LIMIT $4
       `;
 
       try {
-        const searchResult = await client.query(searchQuery, [searchTerm]);
+        const searchResult = await client.query(searchQuery, [searchTerm, validTableName, validColumnName, limit]);
         results.push(...searchResult.rows);
       } catch (error: any) {
         // If full-text search fails, fall back to ILIKE
         const fallbackQuery = `
           SELECT 
-            '${tableName}' as table_name,
-            '${columnName}' as column_name,
-            ${columnName} as column_value,
+            $2 as table_name,
+            $3 as column_name,
+            ${validColumnName} as column_value,
             1.0 as rank,
-            ${columnName} as headline
-          FROM ${tableName}
-          WHERE ${columnName} ILIKE $1
-          LIMIT ${limit}
+            ${validColumnName} as headline
+          FROM ${validTableName}
+          WHERE ${validColumnName} ILIKE $1
+          LIMIT $4
         `;
 
         try {
-          const fallbackResult = await client.query(fallbackQuery, [`%${searchTerm}%`]);
+          const fallbackResult = await client.query(fallbackQuery, [`%${searchTerm}%`, validTableName, validColumnName, limit]);
           results.push(...fallbackResult.rows);
         } catch (fallbackError: any) {
           // Skip this column if both queries fail
