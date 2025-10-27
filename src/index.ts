@@ -84,32 +84,26 @@ function transformHandlerResponse(result: any) {
 server.tool(
   "execute_query",
   "Run a read-only SQL query (SELECT statements). Use this to examine data, understand table structures, and verify changes. Executed in read-only mode for safety. Supports complex queries with JOINs, subqueries, aggregations, etc.",
-  { 
-    query: z.string().describe("SQL SELECT query to execute - supports complex queries with JOINs, WHERE, GROUP BY, ORDER BY, etc."),
-    sql: z.string().optional().describe("Alternative parameter name for SQL query (for backward compatibility)")
-  },
+  { sql: z.string().describe("SQL SELECT query to execute - supports complex queries with JOINs, WHERE, GROUP BY, ORDER BY, etc.") },
   async (args, extra) => {
     try {
-      const sqlQuery = args.query || args.sql;
-      if (!sqlQuery) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: "Error: No SQL query provided. Use 'query' parameter.",
-            },
-          ],
-          isError: true,
-        };
-      }
-      const result = await handleExecuteQuery(pool, sqlQuery);
+      const result = await handleExecuteQuery(pool, args.sql);
       return transformHandlerResponse(result);
     } catch (error) {
+      let errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Provide better error message for parameter validation issues
+      if (errorMessage.includes("Cannot read properties of undefined") || 
+          errorMessage.includes("_zod") ||
+          errorMessage.includes("validation")) {
+        errorMessage = `Invalid parameters for execute_query tool. Expected: { "sql": "SELECT * FROM table_name" }. Received: ${JSON.stringify(args)}`;
+      }
+      
       return {
         content: [
           {
             type: "text" as const,
-            text: error instanceof Error ? error.message : String(error),
+            text: errorMessage,
           },
         ],
         isError: true,
