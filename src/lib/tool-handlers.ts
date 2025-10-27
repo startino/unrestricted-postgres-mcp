@@ -13,7 +13,16 @@ export async function handleExecuteRollback(
 ) {
   if (!transactionId) {
     return {
-      content: [{ type: "text", text: "Error: No transaction ID provided" }],
+      content: [{ 
+        type: "text", 
+        text: JSON.stringify({
+          status: "error",
+          message: "Missing required parameter: transaction_id",
+          details: "The rollback_transaction tool requires a 'transaction_id' parameter to identify which transaction to rollback",
+          expected_format: { transaction_id: "txn_12345" },
+          received: { transaction_id: transactionId || null }
+        }, null, 2)
+      }],
       isError: true,
     };
   }
@@ -27,8 +36,10 @@ export async function handleExecuteRollback(
           text: JSON.stringify(
             {
               status: "error",
-              message: "Transaction not found or already rolled back",
+              message: "Transaction not found",
+              details: `No active transaction found with ID: ${transactionId}`,
               transaction_id: transactionId,
+              suggestion: "Use list_transactions to see all active transactions, or the transaction may have already been committed/rolled back"
             },
             null,
             2,
@@ -52,8 +63,10 @@ export async function handleExecuteRollback(
           text: JSON.stringify(
             {
               status: "error",
-              message: "Transaction client already released",
+              message: "Transaction already released",
+              details: `Transaction ${transactionId} has already been released and cannot be rolled back`,
               transaction_id: transactionId,
+              suggestion: "This transaction was already committed or rolled back. Use list_transactions to see current active transactions"
             },
             null,
             2,
@@ -110,8 +123,11 @@ export async function handleExecuteRollback(
           text: JSON.stringify(
             {
               status: "error",
-              message: `Error rolling back transaction: ${error.message}`,
+              message: "Transaction rollback failed",
+              details: error.message,
               transaction_id: transactionId,
+              error_type: error.code || "ROLLBACK_ERROR",
+              suggestion: "The transaction may have been automatically rolled back due to an error. Check the database state."
             },
             null,
             2,
@@ -129,7 +145,16 @@ export async function handleExecuteQuery(pool: pg.Pool, sql: string) {
     if (!sql) {
       safelyReleaseClient(client);
       return {
-        content: [{ type: "text", text: "Error: No SQL query provided" }],
+        content: [{ 
+          type: "text", 
+          text: JSON.stringify({
+            status: "error",
+            message: "Missing required parameter: sql",
+            details: "The execute_query tool requires a 'sql' parameter containing the SELECT query to execute",
+            expected_format: { sql: "SELECT * FROM table_name WHERE condition" },
+            received: { sql: sql || null }
+          }, null, 2)
+        }],
         isError: true,
       };
     }
@@ -141,7 +166,13 @@ export async function handleExecuteQuery(pool: pg.Pool, sql: string) {
         content: [
           {
             type: "text",
-            text: "Error: Only SELECT queries are allowed with execute_query. For other operations, use execute_dml_ddl_dcl_tcl.",
+            text: JSON.stringify({
+              status: "error",
+              message: "Invalid query type for execute_query tool",
+              details: "The execute_query tool only accepts SELECT statements for safety. Other operations should use execute_dml_ddl_dcl_tcl.",
+              received_query: sql.trim().substring(0, 100) + (sql.length > 100 ? "..." : ""),
+              suggestion: "Use execute_dml_ddl_dcl_tcl for INSERT, UPDATE, DELETE, CREATE, ALTER, DROP operations"
+            }, null, 2)
           },
         ],
         isError: true,
@@ -191,7 +222,16 @@ export async function handleExecuteDML(
     if (!sql) {
       safelyReleaseClient(client);
       return {
-        content: [{ type: "text", text: "Error: No SQL statement provided" }],
+        content: [{ 
+          type: "text", 
+          text: JSON.stringify({
+            status: "error",
+            message: "Missing required parameter: sql",
+            details: "The execute_dml_ddl_dcl_tcl tool requires a 'sql' parameter containing the SQL statement(s) to execute",
+            expected_format: { sql: "INSERT INTO table_name VALUES (...); UPDATE table_name SET ..." },
+            received: { sql: sql || null }
+          }, null, 2)
+        }],
         isError: true,
       };
     }
@@ -247,8 +287,11 @@ export async function handleExecuteDML(
             text: JSON.stringify(
               {
                 status: "error",
-                message: `Error executing statement: ${error.message}`,
-                sql: sql,
+                message: "SQL execution failed",
+                details: error.message,
+                sql_preview: sql.trim().substring(0, 200) + (sql.length > 200 ? "..." : ""),
+                error_type: error.code || "SQL_ERROR",
+                suggestion: "Check your SQL syntax and ensure all referenced tables/columns exist"
               },
               null,
               2,
@@ -271,7 +314,17 @@ export async function handleExecuteMaintenance(pool: pg.Pool, sql: string) {
     if (!sql) {
       safelyReleaseClient(client);
       return {
-        content: [{ type: "text", text: "Error: No SQL statement provided" }],
+        content: [{ 
+          type: "text", 
+          text: JSON.stringify({
+            status: "error",
+            message: "Missing required parameter: sql",
+            details: "The execute_maintenance tool requires a 'sql' parameter containing the maintenance command",
+            expected_format: { sql: "VACUUM table_name;" },
+            allowed_commands: ["VACUUM", "ANALYZE", "CREATE DATABASE"],
+            received: { sql: sql || null }
+          }, null, 2)
+        }],
         isError: true,
       };
     }
@@ -287,7 +340,14 @@ export async function handleExecuteMaintenance(pool: pg.Pool, sql: string) {
         content: [
           {
             type: "text",
-            text: "Error: Only VACUUM, ANALYZE and CREATE DATABASE commands are allowed",
+            text: JSON.stringify({
+              status: "error",
+              message: "Invalid command for execute_maintenance tool",
+              details: "Only VACUUM, ANALYZE, and CREATE DATABASE commands are allowed in maintenance mode",
+              received_command: sql.trim().substring(0, 50) + (sql.length > 50 ? "..." : ""),
+              allowed_commands: ["VACUUM", "ANALYZE", "CREATE DATABASE"],
+              suggestion: "Use execute_dml_ddl_dcl_tcl for other SQL operations"
+            }, null, 2)
           },
         ],
         isError: true,
@@ -323,8 +383,11 @@ export async function handleExecuteMaintenance(pool: pg.Pool, sql: string) {
           text: JSON.stringify(
             {
               status: "error",
-              message: `Error executing statement: ${error.message}`,
-              sql: sql,
+              message: "Maintenance command execution failed",
+              details: error.message,
+              command_preview: sql.trim().substring(0, 100) + (sql.length > 100 ? "..." : ""),
+              error_type: error.code || "MAINTENANCE_ERROR",
+              suggestion: "Check command syntax and ensure you have the necessary privileges"
             },
             null,
             2,
@@ -382,7 +445,16 @@ export async function handleDescribeTable(
 ) {
   if (!tableName) {
     return {
-      content: [{ type: "text", text: "Error: No table name provided" }],
+      content: [{ 
+        type: "text", 
+        text: JSON.stringify({
+          status: "error",
+          message: "Missing required parameter: table_name",
+          details: "The describe_table tool requires a 'table_name' parameter to describe the table structure",
+          expected_format: { table_name: "users", schema_name: "public" },
+          received: { table_name: tableName || null, schema_name: schemaName || "public" }
+        }, null, 2)
+      }],
       isError: true,
     };
   }
@@ -1009,8 +1081,10 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
           type: "text",
           text: JSON.stringify({
             status: "error",
-            message: `Error retrieving database schema: ${error.message}`,
-            error: error.message
+            message: "Database schema retrieval failed",
+            details: error.message,
+            error_type: error.code || "SCHEMA_ERROR",
+            suggestion: "Check database connection and ensure you have access to information_schema tables"
           }, null, 2)
         }
       ],
@@ -1037,7 +1111,10 @@ export async function handleSearchText(
             type: "text",
             text: JSON.stringify({
               status: "error",
-              message: "Search term cannot be empty"
+              message: "Missing required parameter: search_term",
+              details: "The search_text tool requires a 'search_term' parameter to search for text in database columns",
+              expected_format: { search_term: "search phrase", tables: ["table1", "table2"], columns: ["col1", "col2"], limit: 100 },
+              received: { search_term: searchTerm || null, tables: tables || null, columns: columns || null, limit: limit || 100 }
             }, null, 2)
           }
         ],
@@ -1185,8 +1262,16 @@ export async function handleSearchText(
           type: "text",
           text: JSON.stringify({
             status: "error",
-            message: `Error searching text: ${error.message}`,
-            error: error.message
+            message: "Text search failed",
+            details: error.message,
+            search_parameters: {
+              search_term: searchTerm,
+              tables: tables || "all tables",
+              columns: columns || "all text columns",
+              limit: limit
+            },
+            error_type: error.code || "SEARCH_ERROR",
+            suggestion: "Check if the specified tables/columns exist and contain text data"
           }, null, 2)
         }
       ],

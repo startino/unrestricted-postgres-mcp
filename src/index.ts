@@ -83,8 +83,31 @@ function transformHandlerResponse(result: any) {
 // Register tools using the new high-level API
 server.tool(
   "execute_query",
-  "Run a read-only SQL query (SELECT statements). Use this to examine data, understand table structures, and verify changes. Executed in read-only mode for safety. Supports complex queries with JOINs, subqueries, aggregations, etc.",
-  { sql: z.string().describe("SQL SELECT query to execute - supports complex queries with JOINs, WHERE, GROUP BY, ORDER BY, etc.") },
+  `Run a read-only SQL query (SELECT statements). Use this to examine data, understand table structures, and verify changes. Executed in read-only mode for safety.
+
+Supports complex queries with:
+- JOINs (INNER, LEFT, RIGHT, FULL OUTER)
+- Subqueries and CTEs (Common Table Expressions)
+- Aggregations (GROUP BY, HAVING)
+- Window functions
+- JSON operators and array functions
+- PostgreSQL-specific features
+
+Examples:
+- Basic: "SELECT * FROM users WHERE age > 25"
+- Complex: "WITH recent_orders AS (SELECT * FROM orders WHERE created_at > NOW() - INTERVAL '30 days') SELECT u.name, COUNT(ro.id) FROM users u LEFT JOIN recent_orders ro ON u.id = ro.user_id GROUP BY u.id, u.name"
+- JSON: "SELECT data->>'name' as name, data->'address'->>'city' as city FROM profiles WHERE data ? 'address'"
+
+Note: Only SELECT statements are allowed. For other operations, use execute_dml_ddl_dcl_tcl.`,
+  { 
+    sql: z.string()
+      .min(1, "SQL query cannot be empty")
+      .describe("SQL SELECT query to execute - supports complex queries with JOINs, WHERE, GROUP BY, ORDER BY, etc.")
+      .refine(
+        (sql) => sql.trim().toUpperCase().startsWith('SELECT'),
+        "Only SELECT queries are allowed. Use execute_dml_ddl_dcl_tcl for other operations."
+      )
+  },
   async (args, extra) => {
     try {
       const result = await handleExecuteQuery(pool, args.sql);
@@ -114,18 +137,49 @@ server.tool(
 
 server.tool(
   "get_database_schema",
-  "Get comprehensive database schema overview including all tables, columns, types, constraints, indexes, foreign keys, views, and functions. Use this to understand the complete database structure before writing queries.",
+  `Get comprehensive database schema overview including all tables, columns, types, constraints, indexes, foreign keys, views, and functions. Use this to understand the complete database structure before writing queries.
+
+Returns detailed information about:
+- All tables with their columns, data types, and constraints
+- Primary keys, foreign keys, and unique constraints
+- Indexes and their columns
+- Views and their definitions
+- Functions and procedures
+- Table relationships and dependencies
+
+This tool is essential for:
+- Understanding database structure before writing queries
+- Discovering available tables and columns
+- Understanding relationships between tables
+- Planning complex queries with proper JOINs
+
+Example usage: Call without parameters to get the complete schema overview.`,
   {},
   async (args, extra) => {
     try {
       const result = await handleGetDatabaseSchema(pool);
       return transformHandlerResponse(result);
     } catch (error) {
+      let errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Provide better error message for parameter validation issues
+      if (errorMessage.includes("Cannot read properties of undefined") || 
+          errorMessage.includes("_zod") ||
+          errorMessage.includes("validation")) {
+        errorMessage = `Invalid parameters for get_database_schema tool. Expected: {}. Received: ${JSON.stringify(args)}`;
+      }
+      
       return {
         content: [
           {
             type: "text" as const,
-            text: error instanceof Error ? error.message : String(error),
+            text: JSON.stringify({
+              status: "error",
+              message: "Tool execution failed",
+              details: errorMessage,
+              tool: "get_database_schema",
+              suggestion: "Check tool parameters and try again"
+            }, null, 2),
           },
         ],
         isError: true,
@@ -136,20 +190,66 @@ server.tool(
 
 server.tool(
   "execute_dml_ddl_dcl_tcl",
-  "Execute DML, DDL, DCL, or TCL statements (INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc). Supports multiple semicolon-separated statements in one transaction - batch all related operations into a single call. Changes are automatically committed. Supports PostgreSQL features: COPY for bulk operations, INSERT...ON CONFLICT for upserts, window functions, CTEs, JSON operators, array functions, range types, and advanced data types.",
+  `Execute DML, DDL, DCL, or TCL statements (INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc). Supports multiple semicolon-separated statements in one transaction - batch all related operations into a single call. Changes are automatically committed.
+
+Supported operations:
+- DML: INSERT, UPDATE, DELETE, UPSERT (INSERT...ON CONFLICT)
+- DDL: CREATE, ALTER, DROP (tables, indexes, views, functions)
+- DCL: GRANT, REVOKE (permissions)
+- TCL: BEGIN, COMMIT, ROLLBACK (transactions)
+
+PostgreSQL features supported:
+- COPY for bulk operations
+- INSERT...ON CONFLICT for upserts
+- Window functions and CTEs
+- JSON operators and array functions
+- Range types and advanced data types
+- Full-text search functions
+
+Examples:
+- Single: "INSERT INTO users (name, email) VALUES ('John', 'john@example.com')"
+- Multiple: "INSERT INTO users (name) VALUES ('Alice'); UPDATE users SET last_login = NOW() WHERE name = 'Alice'"
+- Upsert: "INSERT INTO users (id, name, email) VALUES (1, 'John', 'john@example.com') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email"
+- Bulk: "COPY users (name, email) FROM STDIN WITH (FORMAT csv)"
+
+Note: All operations are automatically committed. Use execute_query for read-only operations.`,
   {
-    sql: z.string().describe("SQL statement(s) to execute - supports multiple semicolon-separated statements, COPY operations, upserts, window functions, CTEs, and all PostgreSQL features"),
+    sql: z.string()
+      .min(1, "SQL statement cannot be empty")
+      .describe("SQL statement(s) to execute - supports multiple semicolon-separated statements, COPY operations, upserts, window functions, CTEs, and all PostgreSQL features")
+      .refine(
+        (sql) => {
+          const trimmed = sql.trim().toUpperCase();
+          return !trimmed.startsWith('SELECT');
+        },
+        "SELECT queries should use execute_query tool for safety. This tool is for data modification operations."
+      ),
   },
   async (args, extra) => {
     try {
       const result = await handleExecuteDML(pool, args.sql);
       return transformHandlerResponse(result);
     } catch (error) {
+      let errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Provide better error message for parameter validation issues
+      if (errorMessage.includes("Cannot read properties of undefined") || 
+          errorMessage.includes("_zod") ||
+          errorMessage.includes("validation")) {
+        errorMessage = `Invalid parameters for execute_dml_ddl_dcl_tcl tool. Expected: { "sql": "INSERT INTO table_name VALUES (...)" }. Received: ${JSON.stringify(args)}`;
+      }
+      
       return {
         content: [
           {
             type: "text" as const,
-            text: error instanceof Error ? error.message : String(error),
+            text: JSON.stringify({
+              status: "error",
+              message: "Tool execution failed",
+              details: errorMessage,
+              tool: "execute_dml_ddl_dcl_tcl",
+              suggestion: "Check SQL syntax and ensure all referenced tables/columns exist"
+            }, null, 2),
           },
         ],
         isError: true,
@@ -173,11 +273,26 @@ server.tool(
       const result = await handleExecuteMaintenance(pool, args.sql);
       return transformHandlerResponse(result);
     } catch (error) {
+      let errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Provide better error message for parameter validation issues
+      if (errorMessage.includes("Cannot read properties of undefined") || 
+          errorMessage.includes("_zod") ||
+          errorMessage.includes("validation")) {
+        errorMessage = `Invalid parameters for execute_maintenance tool. Expected: { "sql": "VACUUM table_name" }. Received: ${JSON.stringify(args)}`;
+      }
+      
       return {
         content: [
           {
             type: "text" as const,
-            text: error instanceof Error ? error.message : String(error),
+            text: JSON.stringify({
+              status: "error",
+              message: "Tool execution failed",
+              details: errorMessage,
+              tool: "execute_maintenance",
+              suggestion: "Check command syntax and ensure you have necessary privileges for maintenance operations"
+            }, null, 2),
           },
         ],
         isError: true,
@@ -293,18 +408,56 @@ server.tool(
 // Remove prompts since we don't need them, just keeping the direct confirm/rollback model
 server.tool(
   "list_tables",
-  "Get a list of all tables in the database's schema, default is 'public'",
-  { schema_name: z.string().describe("Name of the schema") },
+  `Get a list of all tables in the database's schema. Use this to discover available tables before writing queries or exploring the database structure.
+
+Returns:
+- Table names and types (BASE TABLE, VIEW, etc.)
+- Table schemas and owners
+- Row counts and table sizes
+- Creation timestamps
+
+This tool is useful for:
+- Discovering available tables in a schema
+- Understanding database structure
+- Planning queries and operations
+- Database exploration and documentation
+
+Examples:
+- List all tables in public schema: schema_name="public"
+- List tables in specific schema: schema_name="analytics"
+
+Note: Defaults to 'public' schema if not specified.`,
+  { 
+    schema_name: z.string()
+      .min(1, "Schema name cannot be empty")
+      .describe("Name of the schema to list tables from (default: 'public')")
+      .default("public")
+  },
   async (args, extra) => {
     try {
       const result = await handleListTables(pool, args.schema_name);
       return transformHandlerResponse(result);
     } catch (error) {
+      let errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Provide better error message for parameter validation issues
+      if (errorMessage.includes("Cannot read properties of undefined") || 
+          errorMessage.includes("_zod") ||
+          errorMessage.includes("validation")) {
+        errorMessage = `Invalid parameters for list_tables tool. Expected: { "schema_name": "public" }. Received: ${JSON.stringify(args)}`;
+      }
+      
       return {
         content: [
           {
             type: "text" as const,
-            text: error instanceof Error ? error.message : String(error),
+            text: JSON.stringify({
+              status: "error",
+              message: "Tool execution failed",
+              details: errorMessage,
+              tool: "list_tables",
+              suggestion: "Check schema name and ensure it exists in the database"
+            }, null, 2),
           },
         ],
         isError: true,
@@ -315,10 +468,36 @@ server.tool(
 
 server.tool(
   "describe_table",
-  "Get detailed information about a specific table, including columns, primary keys, foreign keys, and indexes",
+  `Get detailed information about a specific table, including columns, primary keys, foreign keys, and indexes. Use this to understand table structure before writing queries.
+
+Returns detailed information about:
+- All columns with data types, nullability, and defaults
+- Primary keys and unique constraints
+- Foreign key relationships and references
+- Indexes and their columns
+- Table statistics (row count, size)
+- Column comments and descriptions
+
+This tool is essential for:
+- Understanding table structure before writing queries
+- Discovering column names and types
+- Understanding relationships between tables
+- Planning JOINs and complex queries
+- Database documentation and exploration
+
+Examples:
+- Describe users table: table_name="users", schema_name="public"
+- Describe table in specific schema: table_name="orders", schema_name="analytics"
+
+Note: Defaults to 'public' schema if not specified.`,
   {
-    table_name: z.string().describe("Name of the table to describe"),
-    schema_name: z.string().describe("Name of the schema").default("public"),
+    table_name: z.string()
+      .min(1, "Table name cannot be empty")
+      .describe("Name of the table to describe"),
+    schema_name: z.string()
+      .min(1, "Schema name cannot be empty")
+      .describe("Name of the schema containing the table (default: 'public')")
+      .default("public"),
   },
   async (args, extra) => {
     try {
@@ -329,11 +508,26 @@ server.tool(
       );
       return transformHandlerResponse(result);
     } catch (error) {
+      let errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Provide better error message for parameter validation issues
+      if (errorMessage.includes("Cannot read properties of undefined") || 
+          errorMessage.includes("_zod") ||
+          errorMessage.includes("validation")) {
+        errorMessage = `Invalid parameters for describe_table tool. Expected: { "table_name": "users", "schema_name": "public" }. Received: ${JSON.stringify(args)}`;
+      }
+      
       return {
         content: [
           {
             type: "text" as const,
-            text: error instanceof Error ? error.message : String(error),
+            text: JSON.stringify({
+              status: "error",
+              message: "Tool execution failed",
+              details: errorMessage,
+              tool: "describe_table",
+              suggestion: "Check table and schema names and ensure they exist in the database"
+            }, null, 2),
           },
         ],
         isError: true,
@@ -410,12 +604,45 @@ server.tool(
 
 server.tool(
   "search_text",
-  "Search text across database tables using PostgreSQL's full-text search capabilities. Supports searching multiple columns and tables with ranking and highlighting. Use this for content search, finding records by text content, or implementing search functionality.",
+  `Search text across database tables using PostgreSQL's full-text search capabilities. Supports searching multiple columns and tables with ranking and highlighting. Use this for content search, finding records by text content, or implementing search functionality.
+
+Features:
+- Full-text search with PostgreSQL's to_tsvector and plainto_tsquery
+- Automatic fallback to ILIKE pattern matching if full-text search fails
+- Ranking and relevance scoring
+- Text highlighting with context
+- Search across multiple tables and columns
+- Configurable result limits
+
+Search capabilities:
+- Natural language search (handles stemming, stop words)
+- Phrase search with quotes
+- Boolean operators (AND, OR, NOT)
+- Wildcard patterns (with ILIKE fallback)
+
+Examples:
+- Basic: search_term="database management"
+- Specific tables: search_term="user data", tables=["users", "profiles"]
+- Specific columns: search_term="email", columns=["email", "username"]
+- Limited results: search_term="error", limit=50
+
+Note: Searches text, varchar, and char columns. Use execute_query for exact matches or complex filtering.`,
   {
-    search_term: z.string().describe("Text to search for"),
-    tables: z.array(z.string()).optional().describe("Specific tables to search (optional - searches all tables if not provided)"),
-    columns: z.array(z.string()).optional().describe("Specific columns to search (optional - searches all text columns if not provided)"),
-    limit: z.number().optional().describe("Maximum number of results to return (default: 100)"),
+    search_term: z.string()
+      .min(1, "Search term cannot be empty")
+      .describe("Text to search for - supports natural language, phrases, and boolean operators"),
+    tables: z.array(z.string())
+      .optional()
+      .describe("Specific tables to search (optional - searches all tables if not provided)"),
+    columns: z.array(z.string())
+      .optional()
+      .describe("Specific columns to search (optional - searches all text columns if not provided)"),
+    limit: z.number()
+      .int()
+      .min(1)
+      .max(1000)
+      .optional()
+      .describe("Maximum number of results to return (default: 100, max: 1000)"),
   },
   async (args, extra) => {
     try {
