@@ -813,20 +813,39 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
         c.ordinal_position,
         tc.constraint_name,
         tc.constraint_type,
-        kcu.referenced_table_name,
-        kcu.referenced_column_name,
         i.indexname,
         i.indexdef
       FROM information_schema.tables t
       LEFT JOIN information_schema.columns c ON t.table_name = c.table_name AND t.table_schema = c.table_schema
       LEFT JOIN information_schema.table_constraints tc ON t.table_name = tc.table_name AND t.table_schema = tc.table_schema
-      LEFT JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_name = kcu.table_name
       LEFT JOIN pg_indexes i ON t.table_name = i.tablename
       WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE'
       ORDER BY t.table_name, c.ordinal_position, tc.constraint_name, i.indexname;
     `;
 
     const tablesResult = await client.query(tablesQuery);
+
+    // Get foreign key relationships using PostgreSQL system tables
+    const foreignKeysQuery = `
+      SELECT 
+        tc.table_name,
+        kcu.column_name,
+        ccu.table_name AS foreign_table_name,
+        ccu.column_name AS foreign_column_name,
+        tc.constraint_name
+      FROM information_schema.table_constraints AS tc 
+      JOIN information_schema.key_column_usage AS kcu
+        ON tc.constraint_name = kcu.constraint_name
+        AND tc.table_schema = kcu.table_schema
+      JOIN information_schema.constraint_column_usage AS ccu
+        ON ccu.constraint_name = tc.constraint_name
+        AND ccu.table_schema = tc.table_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY' 
+        AND tc.table_schema = 'public'
+      ORDER BY tc.table_name, kcu.column_name;
+    `;
+
+    const foreignKeysResult = await client.query(foreignKeysQuery);
 
     // Get views
     const viewsQuery = `
@@ -908,9 +927,7 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
       if (row.constraint_name && !tables[row.table_name].constraints.find((c: any) => c.constraint_name === row.constraint_name)) {
         tables[row.table_name].constraints.push({
           constraint_name: row.constraint_name,
-          constraint_type: row.constraint_type,
-          referenced_table: row.referenced_table_name,
-          referenced_column: row.referenced_column_name
+          constraint_type: row.constraint_type
         });
       }
 
@@ -919,6 +936,18 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
           indexname: row.indexname,
           indexdef: row.indexdef
         });
+      }
+    });
+
+    // Process foreign keys
+    foreignKeysResult.rows.forEach((row: any) => {
+      if (tables[row.table_name]) {
+        // Find the constraint and add foreign key info
+        const constraint = tables[row.table_name].constraints.find((c: any) => c.constraint_name === row.constraint_name);
+        if (constraint) {
+          constraint.referenced_table = row.foreign_table_name;
+          constraint.referenced_column = row.foreign_column_name;
+        }
       }
     });
 
