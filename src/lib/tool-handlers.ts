@@ -184,9 +184,7 @@ export async function handleExecuteQuery(pool: pg.Pool, sql: string) {
 
 export async function handleExecuteDML(
   pool: pg.Pool,
-  transactionManager: TransactionManager,
   sql: string,
-  transactionTimeoutMs: number,
 ) {
   const client = await pool.connect();
   try {
@@ -201,42 +199,38 @@ export async function handleExecuteDML(
     // Begin a transaction
     await client.query("BEGIN");
 
-    // Generate transaction ID
-    const transactionId = generateTransactionId();
-
     try {
-      // Execute the SQL statement
+      // Execute the SQL statement(s)
       const startTime = Date.now();
       const result = await client.query(sql);
       const execTime = Date.now() - startTime;
 
-      // Store client in active transactions
-      transactionManager.addTransaction(transactionId, client, sql);
+      // Automatically commit the transaction
+      await client.query("COMMIT");
 
-      // Don't release the client - it's now associated with the transaction
+      // Release the client
+      safelyReleaseClient(client);
 
-      // Format a more user-friendly message that prompts for commit
+      // Count statements for better feedback
+      const statementCount = sql.split(';').filter(stmt => stmt.trim().length > 0).length;
+      
+      // Return success result
       const resultObj = {
-        transaction_id: transactionId,
-        status: "pending",
+        status: "success",
+        message: `SQL executed and committed successfully (${statementCount} statement${statementCount > 1 ? 's' : ''})`,
         result: {
           command: result.command,
           rowCount: result.rowCount,
           execution_time_ms: execTime,
+          statements_executed: statementCount,
         },
-        timeout_ms: transactionTimeoutMs,
       };
 
       return {
         content: [
           {
             type: "text",
-            text:
-              JSON.stringify(resultObj, null, 2) +
-              "\n\nThe transaction will automatically roll back if not committed within " +
-              Math.floor(transactionTimeoutMs / 1000) +
-              " seconds.\n\nTransaction ID: " +
-              transactionId,
+            text: JSON.stringify(resultObj, null, 2),
           },
         ],
         isError: false,
@@ -344,127 +338,6 @@ export async function handleExecuteMaintenance(pool: pg.Pool, sql: string) {
   }
 }
 
-export async function handleExecuteCommit(
-  transactionManager: TransactionManager,
-  transactionId: string,
-) {
-  if (!transactionId) {
-    return {
-      content: [{ type: "text", text: "Error: No transaction ID provided" }],
-      isError: true,
-    };
-  }
-
-  // Check if transaction exists
-  if (!transactionManager.hasTransaction(transactionId)) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            {
-              status: "error",
-              message: "Transaction not found or already committed",
-              transaction_id: transactionId,
-            },
-            null,
-            2,
-          ),
-        },
-      ],
-      isError: true,
-    };
-  }
-
-  // Get the transaction data
-  const transaction = transactionManager.getTransaction(transactionId)!;
-
-  // Check if already released
-  if (transaction.released) {
-    transactionManager.removeTransaction(transactionId);
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            {
-              status: "error",
-              message: "Transaction client already released",
-              transaction_id: transactionId,
-            },
-            null,
-            2,
-          ),
-        },
-      ],
-      isError: true,
-    };
-  }
-
-  try {
-    // Commit the transaction
-    await transaction.client.query("COMMIT");
-
-    // Mark as released before actually releasing
-    transaction.released = true;
-    safelyReleaseClient(transaction.client);
-
-    // Clean up
-    transactionManager.removeTransaction(transactionId);
-
-    return {
-      content: [
-        {
-          type: "text",
-          text:
-            JSON.stringify(
-              {
-                status: "committed",
-                message: "Transaction successfully committed",
-                transaction_id: transactionId,
-              },
-              null,
-              2,
-            ) +
-            "\n\nTransaction has been successfully committed. All changes have been saved to the database.",
-        },
-      ],
-      isError: false,
-    };
-  } catch (error: any) {
-    // If there's an error during commit, try to roll back
-    try {
-      await transaction.client.query("ROLLBACK");
-    } catch (rollbackError) {
-      console.error("Error during rollback:", rollbackError);
-    }
-
-    // Mark as released before actually releasing
-    transaction.released = true;
-    safelyReleaseClient(transaction.client);
-
-    // Clean up
-    transactionManager.removeTransaction(transactionId);
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            {
-              status: "error",
-              message: `Error committing transaction: ${error.message}`,
-              transaction_id: transactionId,
-            },
-            null,
-            2,
-          ),
-        },
-      ],
-      isError: true,
-    };
-  }
-}
 
 export async function handleListTables(
   pool: pg.Pool,
@@ -919,3 +792,360 @@ export async function handleResetSession(pool: pg.Pool): Promise<{
 }
 
 
+import pg from "pg";
+import { safelyReleaseClient } from "./utils";
+
+export async function handleGetDatabaseSchema(pool: pg.Pool) {
+  const client = await pool.connect();
+  try {
+    // Get all tables with their columns, types, constraints, and indexes
+    const tablesQuery = `
+      SELECT 
+        t.table_name,
+        t.table_type,
+        c.column_name,
+        c.data_type,
+        c.is_nullable,
+        c.column_default,
+        c.character_maximum_length,
+        c.numeric_precision,
+        c.numeric_scale,
+        c.ordinal_position,
+        tc.constraint_name,
+        tc.constraint_type,
+        kcu.referenced_table_name,
+        kcu.referenced_column_name,
+        i.indexname,
+        i.indexdef
+      FROM information_schema.tables t
+      LEFT JOIN information_schema.columns c ON t.table_name = c.table_name AND t.table_schema = c.table_schema
+      LEFT JOIN information_schema.table_constraints tc ON t.table_name = tc.table_name AND t.table_schema = tc.table_schema
+      LEFT JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_name = kcu.table_name
+      LEFT JOIN pg_indexes i ON t.table_name = i.tablename
+      WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE'
+      ORDER BY t.table_name, c.ordinal_position, tc.constraint_name, i.indexname;
+    `;
+
+    const tablesResult = await client.query(tablesQuery);
+
+    // Get views
+    const viewsQuery = `
+      SELECT 
+        table_name,
+        view_definition
+      FROM information_schema.views
+      WHERE table_schema = 'public'
+      ORDER BY table_name;
+    `;
+
+    const viewsResult = await client.query(viewsQuery);
+
+    // Get functions
+    const functionsQuery = `
+      SELECT 
+        routine_name,
+        routine_type,
+        data_type,
+        routine_definition
+      FROM information_schema.routines
+      WHERE routine_schema = 'public'
+      ORDER BY routine_name;
+    `;
+
+    const functionsResult = await client.query(functionsQuery);
+
+    // Get table statistics
+    const statsQuery = `
+      SELECT 
+        schemaname,
+        tablename,
+        n_tup_ins as inserts,
+        n_tup_upd as updates,
+        n_tup_del as deletes,
+        n_live_tuples,
+        n_dead_tuples,
+        last_vacuum,
+        last_autovacuum,
+        last_analyze,
+        last_autoanalyze
+      FROM pg_stat_user_tables
+      ORDER BY tablename;
+    `;
+
+    const statsResult = await client.query(statsQuery);
+
+    // Organize the data
+    const tables: any = {};
+    const views: any = {};
+    const functions: any = {};
+    const statistics: any = {};
+
+    // Process tables
+    tablesResult.rows.forEach((row: any) => {
+      if (!tables[row.table_name]) {
+        tables[row.table_name] = {
+          table_name: row.table_name,
+          table_type: row.table_type,
+          columns: {},
+          constraints: [],
+          indexes: []
+        };
+      }
+
+      if (row.column_name) {
+        tables[row.table_name].columns[row.column_name] = {
+          column_name: row.column_name,
+          data_type: row.data_type,
+          is_nullable: row.is_nullable === 'YES',
+          column_default: row.column_default,
+          character_maximum_length: row.character_maximum_length,
+          numeric_precision: row.numeric_precision,
+          numeric_scale: row.numeric_scale,
+          ordinal_position: row.ordinal_position
+        };
+      }
+
+      if (row.constraint_name && !tables[row.table_name].constraints.find((c: any) => c.constraint_name === row.constraint_name)) {
+        tables[row.table_name].constraints.push({
+          constraint_name: row.constraint_name,
+          constraint_type: row.constraint_type,
+          referenced_table: row.referenced_table_name,
+          referenced_column: row.referenced_column_name
+        });
+      }
+
+      if (row.indexname && !tables[row.table_name].indexes.find((i: any) => i.indexname === row.indexname)) {
+        tables[row.table_name].indexes.push({
+          indexname: row.indexname,
+          indexdef: row.indexdef
+        });
+      }
+    });
+
+    // Process views
+    viewsResult.rows.forEach((row: any) => {
+      views[row.table_name] = {
+        table_name: row.table_name,
+        view_definition: row.view_definition
+      };
+    });
+
+    // Process functions
+    functionsResult.rows.forEach((row: any) => {
+      functions[row.routine_name] = {
+        routine_name: row.routine_name,
+        routine_type: row.routine_type,
+        data_type: row.data_type,
+        routine_definition: row.routine_definition
+      };
+    });
+
+    // Process statistics
+    statsResult.rows.forEach((row: any) => {
+      statistics[row.tablename] = {
+        inserts: row.inserts,
+        updates: row.updates,
+        deletes: row.deletes,
+        live_tuples: row.live_tuples,
+        dead_tuples: row.dead_tuples,
+        last_vacuum: row.last_vacuum,
+        last_autovacuum: row.last_autovacuum,
+        last_analyze: row.last_analyze,
+        last_autoanalyze: row.last_autoanalyze
+      };
+    });
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            status: "success",
+            message: "Database schema retrieved successfully",
+            result: {
+              tables,
+              views,
+              functions,
+              statistics
+            }
+          }, null, 2)
+        }
+      ]
+    };
+
+  } catch (error: any) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            status: "error",
+            message: `Error retrieving database schema: ${error.message}`,
+            error: error.message
+          }, null, 2)
+        }
+      ],
+      isError: true
+    };
+  } finally {
+    safelyReleaseClient(client);
+  }
+}
+
+export async function handleSearchText(
+  pool: pg.Pool,
+  searchTerm: string,
+  tables?: string[],
+  columns?: string[],
+  limit: number = 100
+) {
+  const client = await pool.connect();
+  try {
+    if (!searchTerm || searchTerm.trim().length === 0) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              status: "error",
+              message: "Search term cannot be empty"
+            }, null, 2)
+          }
+        ],
+        isError: true
+      };
+    }
+
+    // Get all text columns from specified tables or all tables
+    let tablesQuery = `
+      SELECT 
+        t.table_name,
+        c.column_name,
+        c.data_type
+      FROM information_schema.tables t
+      JOIN information_schema.columns c ON t.table_name = c.table_name AND t.table_schema = c.table_schema
+      WHERE t.table_schema = 'public' 
+        AND t.table_type = 'BASE TABLE'
+        AND c.data_type IN ('text', 'character varying', 'character', 'varchar', 'char')
+    `;
+
+    if (tables && tables.length > 0) {
+      const tableList = tables.map(t => `'${t}'`).join(',');
+      tablesQuery += ` AND t.table_name IN (${tableList})`;
+    }
+
+    if (columns && columns.length > 0) {
+      const columnList = columns.map(c => `'${c}'`).join(',');
+      tablesQuery += ` AND c.column_name IN (${columnList})`;
+    }
+
+    tablesQuery += ` ORDER BY t.table_name, c.column_name`;
+
+    const tablesResult = await client.query(tablesQuery);
+
+    if (tablesResult.rows.length === 0) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              status: "success",
+              message: "No text columns found to search",
+              result: {
+                search_term: searchTerm,
+                results: []
+              }
+            }, null, 2)
+          }
+        ]
+      };
+    }
+
+    // Build search queries for each table/column combination
+    const searchQueries = [];
+    const results: any[] = [];
+
+    for (const row of tablesResult.rows) {
+      const tableName = row.table_name;
+      const columnName = row.column_name;
+      
+      // Use PostgreSQL's full-text search with ranking
+      const searchQuery = `
+        SELECT 
+          '${tableName}' as table_name,
+          '${columnName}' as column_name,
+          ${columnName} as column_value,
+          ts_rank(to_tsvector('english', ${columnName}), plainto_tsquery('english', $1)) as rank,
+          ts_headline('english', ${columnName}, plainto_tsquery('english', $1), 'MaxWords=50, MinWords=10') as headline
+        FROM ${tableName}
+        WHERE to_tsvector('english', ${columnName}) @@ plainto_tsquery('english', $1)
+        ORDER BY rank DESC
+        LIMIT ${limit}
+      `;
+
+      try {
+        const searchResult = await client.query(searchQuery, [searchTerm]);
+        results.push(...searchResult.rows);
+      } catch (error: any) {
+        // If full-text search fails, fall back to ILIKE
+        const fallbackQuery = `
+          SELECT 
+            '${tableName}' as table_name,
+            '${columnName}' as column_name,
+            ${columnName} as column_value,
+            1.0 as rank,
+            ${columnName} as headline
+          FROM ${tableName}
+          WHERE ${columnName} ILIKE $1
+          LIMIT ${limit}
+        `;
+
+        try {
+          const fallbackResult = await client.query(fallbackQuery, [`%${searchTerm}%`]);
+          results.push(...fallbackResult.rows);
+        } catch (fallbackError: any) {
+          // Skip this column if both queries fail
+          continue;
+        }
+      }
+    }
+
+    // Sort results by rank and limit
+    results.sort((a, b) => (b.rank || 0) - (a.rank || 0));
+    const limitedResults = results.slice(0, limit);
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            status: "success",
+            message: `Found ${limitedResults.length} results for "${searchTerm}"`,
+            result: {
+              search_term: searchTerm,
+              total_results: limitedResults.length,
+              results: limitedResults
+            }
+          }, null, 2)
+        }
+      ]
+    };
+
+  } catch (error: any) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            status: "error",
+            message: `Error searching text: ${error.message}`,
+            error: error.message
+          }, null, 2)
+        }
+      ],
+      isError: true
+    };
+  } finally {
+    safelyReleaseClient(client);
+  }
+}

@@ -85,6 +85,8 @@ Add to your `claude_desktop_config.json`:
 | Tool | Purpose | Parameters |
 |------|---------|------------|
 | `execute_query` | Execute read-only SELECT queries | `sql` (string) |
+| `get_database_schema` | Get comprehensive database schema overview | None |
+| `search_text` | Search text across tables using full-text search | `search_term` (string), `tables` (array, optional), `columns` (array, optional), `limit` (number, optional) |
 | `list_tables` | List all tables in a schema | `schema_name` (string, optional) |
 | `describe_table` | Get detailed table schema information | `table_name` (string), `schema_name` (string, optional) |
 
@@ -92,9 +94,8 @@ Add to your `claude_desktop_config.json`:
 
 | Tool | Purpose | Parameters |
 |------|---------|------------|
-| `execute_dml_ddl_dcl_tcl` | Execute data modification operations | `sql` (string) |
+| `execute_dml_ddl_dcl_tcl` | Execute data modification operations (auto-committed) | `sql` (string) |
 | `execute_maintenance` | Run maintenance commands (VACUUM, ANALYZE) | `sql` (string) |
-| `execute_commit` | Commit a pending transaction | `transaction_id` (string) |
 | `execute_rollback` | Rollback a pending transaction | `transaction_id` (string) |
 
 ### **Transaction Management & Recovery**
@@ -107,12 +108,12 @@ Add to your `claude_desktop_config.json`:
 
 ## 🔄 Workflow Examples
 
-### **Safe Data Modification Workflow**
+### **Typical Usage Pattern**
 
-1. **Analyze**: Use `execute_query` to understand current data
-2. **Modify**: Use `execute_dml_ddl_dcl_tcl` to make changes
-3. **Review**: Transaction is created but not committed
-4. **Decide**: Use `execute_commit` or `execute_rollback` based on review
+1. Query data to understand current state
+2. Execute modifications (automatically committed)
+3. Query again to verify changes
+
 
 ### **Recovery from Stuck Transactions**
 

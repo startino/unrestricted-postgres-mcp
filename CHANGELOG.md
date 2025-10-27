@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Simplified TypeScript configuration (removed multiple tsconfig files)
 - Enhanced transaction management with better error recovery
 - Improved import paths and module resolution
+- **BREAKING**: Removed manual commit system - all DML operations now auto-commit
+- Removed `execute_commit` tool as transactions are automatically committed
 
 ### Fixed
 - Resolved import hell between TypeScript and JavaScript modules

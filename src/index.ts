@@ -11,7 +11,6 @@ import { safelyReleaseClient } from "./lib/utils";
 import {
   handleExecuteQuery,
   handleExecuteDML,
-  handleExecuteCommit,
   handleExecuteMaintenance,
   handleListTables,
   handleDescribeTable,
@@ -20,6 +19,8 @@ import {
   handleListTransactions,
   handleForceRollback,
   handleResetSession,
+  handleGetDatabaseSchema,
+  handleSearchText,
 } from "./lib/tool-handlers";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
@@ -82,8 +83,8 @@ function transformHandlerResponse(result: any) {
 // Register tools using the new high-level API
 server.tool(
   "execute_query",
-  "Run a read-only SQL query (SELECT statements). Executed in read-only mode for safety.",
-  { sql: z.string().describe("SQL query to execute (SELECT only)") },
+  "Run a read-only SQL query (SELECT statements). Use this to examine data, understand table structures, and verify changes. Executed in read-only mode for safety. Supports complex queries with JOINs, subqueries, aggregations, etc.",
+  { sql: z.string().describe("SQL SELECT query to execute - supports complex queries with JOINs, WHERE, GROUP BY, ORDER BY, etc.") },
   async (args, extra) => {
     try {
       const result = await handleExecuteQuery(pool, args.sql);
@@ -103,41 +104,36 @@ server.tool(
 );
 
 server.tool(
+  "get_database_schema",
+  "Get comprehensive database schema overview including all tables, columns, types, constraints, indexes, foreign keys, views, and functions. Use this to understand the complete database structure before writing queries.",
+  {},
+  async (args, extra) => {
+    try {
+      const result = await handleGetDatabaseSchema(pool);
+      return transformHandlerResponse(result);
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: error instanceof Error ? error.message : String(error),
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
   "execute_dml_ddl_dcl_tcl",
-  "Execute DML, DDL, DCL, or TCL statements (INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc). Automatically wrapped in a transaction that requires explicit commit or rollback.",
+  "Execute DML, DDL, DCL, or TCL statements (INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc). Supports multiple semicolon-separated statements in one transaction - batch all related operations into a single call. Changes are automatically committed. Supports PostgreSQL features: COPY for bulk operations, INSERT...ON CONFLICT for upserts, window functions, CTEs, JSON operators, array functions, range types, and advanced data types.",
   {
-    sql: z.string().describe("SQL statement to execute"),
+    sql: z.string().describe("SQL statement(s) to execute - supports multiple semicolon-separated statements, COPY operations, upserts, window functions, CTEs, and all PostgreSQL features"),
   },
   async (args, extra) => {
     try {
-      // Check transaction limit
-      if (
-        transactionManager.transactionCount >= config.maxConcurrentTransactions
-      ) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                {
-                  status: "error",
-                  message: `Maximum concurrent transactions limit reached (${config.maxConcurrentTransactions}). Try again later.`,
-                },
-                null,
-                2,
-              ),
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      const result = await handleExecuteDML(
-        pool,
-        transactionManager,
-        args.sql,
-        config.transactionTimeoutMs,
-      );
+      const result = await handleExecuteDML(pool, args.sql);
       return transformHandlerResponse(result);
     } catch (error) {
       return {
@@ -181,36 +177,6 @@ server.tool(
   },
 );
 
-server.tool(
-  "execute_commit",
-  "Commit a transaction by its ID to permanently apply the changes to the database",
-  {
-    transaction_id: z
-      .string()
-      .describe(
-        "ID of the transaction to commit - this will permanently save all changes to the database",
-      ),
-  },
-  async (args, extra) => {
-    try {
-      const result = await handleExecuteCommit(
-        transactionManager,
-        args.transaction_id,
-      );
-      return transformHandlerResponse(result);
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: error instanceof Error ? error.message : String(error),
-          },
-        ],
-        isError: true,
-      };
-    }
-  },
-);
 
 server.tool(
   "execute_rollback",
@@ -418,6 +384,33 @@ server.tool(
   async (args, extra) => {
     try {
       const result = await handleResetSession(pool);
+      return transformHandlerResponse(result);
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: error instanceof Error ? error.message : String(error),
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
+  "search_text",
+  "Search text across database tables using PostgreSQL's full-text search capabilities. Supports searching multiple columns and tables with ranking and highlighting. Use this for content search, finding records by text content, or implementing search functionality.",
+  {
+    search_term: z.string().describe("Text to search for"),
+    tables: z.array(z.string()).optional().describe("Specific tables to search (optional - searches all tables if not provided)"),
+    columns: z.array(z.string()).optional().describe("Specific columns to search (optional - searches all text columns if not provided)"),
+    limit: z.number().optional().describe("Maximum number of results to return (default: 100)"),
+  },
+  async (args, extra) => {
+    try {
+      const result = await handleSearchText(pool, args.search_term, args.tables, args.columns, args.limit);
       return transformHandlerResponse(result);
     } catch (error) {
       return {
