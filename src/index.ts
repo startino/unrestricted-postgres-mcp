@@ -429,9 +429,9 @@ Examples:
 Note: Defaults to 'public' schema if not specified.`,
   { 
     schema_name: z.string()
-      .min(1, "Schema name cannot be empty")
-      .describe("Name of the schema to list tables from (default: 'public')")
+      .optional()
       .default("public")
+      .describe("Name of the schema to list tables from (default: 'public')")
   },
   async (args, extra) => {
     try {
@@ -495,9 +495,9 @@ Note: Defaults to 'public' schema if not specified.`,
       .min(1, "Table name cannot be empty")
       .describe("Name of the table to describe"),
     schema_name: z.string()
-      .min(1, "Schema name cannot be empty")
-      .describe("Name of the schema containing the table (default: 'public')")
-      .default("public"),
+      .optional()
+      .default("public")
+      .describe("Name of the schema containing the table (default: 'public')"),
   },
   async (args, extra) => {
     try {
@@ -609,10 +609,10 @@ server.tool(
 Features:
 - Full-text search with PostgreSQL's to_tsvector and plainto_tsquery
 - Automatic fallback to ILIKE pattern matching if full-text search fails
-- Ranking and relevance scoring
+- Ranking and relevance scoring (results sorted by relevance)
 - Text highlighting with context
 - Search across multiple tables and columns
-- Configurable result limits
+- Configurable result limits with intelligent defaults
 
 Search capabilities:
 - Natural language search (handles stemming, stop words)
@@ -620,11 +620,24 @@ Search capabilities:
 - Boolean operators (AND, OR, NOT)
 - Wildcard patterns (with ILIKE fallback)
 
+Result limits - choose appropriately (max 50 to prevent token overload):
+- Default (5): Quick preview, testing, general exploration - returns most relevant matches
+- 10-20: Moderate search for specific content - good for focused queries
+- 25-40: Comprehensive search when you need broader results - useful for analytics
+- 40-50: Maximum for extensive analysis - returns all available relevant matches
+
+Performance considerations:
+- Lower limits (5-15) are faster and use less memory
+- Moderate limits (20-30) balance comprehensiveness with performance
+- Higher limits (40-50) may increase processing time but stay within token limits
+- Results are pre-ranked by relevance, so most important matches appear first
+- Maximum limit of 50 ensures responses stay within LLM context limits
+
 Examples:
-- Basic: search_term="database management"
-- Specific tables: search_term="user data", tables=["users", "profiles"]
-- Specific columns: search_term="email", columns=["email", "username"]
-- Limited results: search_term="error", limit=50
+- Quick preview: search_term="error log", limit=5 (default)
+- Focused search: search_term="database management", tables=["documents"], limit=15
+- Broad exploration: search_term="user@example.com", columns=["email", "username"], limit=30
+- Comprehensive analysis: search_term="error", limit=50
 
 Note: Searches text, varchar, and char columns. Use execute_query for exact matches or complex filtering.`,
   {
@@ -640,9 +653,10 @@ Note: Searches text, varchar, and char columns. Use execute_query for exact matc
     limit: z.number()
       .int()
       .min(1)
-      .max(1000)
+      .max(50)
       .optional()
-      .describe("Maximum number of results to return (default: 100, max: 1000)"),
+      .default(5)
+      .describe("Maximum number of results to return, ranked by relevance. Use 5-10 for quick previews, 15-30 for focused search, 40-50 for comprehensive results. Maximum: 50. Default: 5 (fast, shows most relevant matches)"),
   },
   async (args, extra) => {
     try {
