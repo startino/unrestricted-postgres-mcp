@@ -154,10 +154,15 @@ This tool is essential for:
 - Planning complex queries with proper JOINs
 
 Example usage: Call without parameters to get the complete schema overview.`,
-  {},
+  {
+    schema_name: z.string()
+      .optional()
+      .default("public")
+      .describe("Name of the schema to inspect (default: 'public')")
+  },
   async (args, extra) => {
     try {
-      const result = await handleGetDatabaseSchema(pool);
+      const result = await handleGetDatabaseSchema(pool, args.schema_name);
       return transformHandlerResponse(result);
     } catch (error) {
       let errorMessage = error instanceof Error ? error.message : String(error);
@@ -166,7 +171,7 @@ Example usage: Call without parameters to get the complete schema overview.`,
       if (errorMessage.includes("Cannot read properties of undefined") || 
           errorMessage.includes("_zod") ||
           errorMessage.includes("validation")) {
-        errorMessage = `Invalid parameters for get_database_schema tool. Expected: {}. Received: ${JSON.stringify(args)}`;
+        errorMessage = `Invalid parameters for get_database_schema tool. Expected: { \"schema_name\": \"public\" }. Received: ${JSON.stringify(args)}`;
       }
       
       return {
@@ -657,10 +662,14 @@ Note: Searches text, varchar, and char columns. Use execute_query for exact matc
       .optional()
       .default(5)
       .describe("Maximum number of results to return, ranked by relevance. Use 5-10 for quick previews, 15-30 for focused search, 40-50 for comprehensive results. Maximum: 50. Default: 5 (fast, shows most relevant matches)"),
+    schema_name: z.string()
+      .optional()
+      .default("public")
+      .describe("Name of the schema to search within (default: 'public')"),
   },
   async (args, extra) => {
     try {
-      const result = await handleSearchText(pool, args.search_term, args.tables, args.columns, args.limit);
+      const result = await handleSearchText(pool, args.search_term, args.tables, args.columns, args.limit, args.schema_name);
       return transformHandlerResponse(result);
     } catch (error) {
       return {

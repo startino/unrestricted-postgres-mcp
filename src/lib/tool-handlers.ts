@@ -584,9 +584,9 @@ export async function handleDescribeTable(
 export async function handleListResources(pool: pg.Pool, resourceBaseUrl: URL) {
   const client = await pool.connect();
   try {
-    // Get all tables from the public schema
+    // Get all tables from the current schema (based on search_path)
     const result = await client.query(
-      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'",
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()",
     );
 
     return {
@@ -624,7 +624,7 @@ export async function handleReadResource(pool: pg.Pool, resourceUri: string) {
       FROM 
         information_schema.columns 
       WHERE 
-        table_name = $1
+        table_name = $1 AND table_schema = current_schema()
       ORDER BY 
         ordinal_position`,
       [tableName],
@@ -642,7 +642,7 @@ export async function handleReadResource(pool: pg.Pool, resourceUri: string) {
         i.indrelid = $1::regclass
         AND i.indisprimary
     `,
-      [`public.${tableName}`],
+      [`${tableName}`],
     );
 
     const primaryKeys = pkResult.rows.map((row) => row.column_name);
@@ -863,7 +863,7 @@ export async function handleResetSession(pool: pg.Pool): Promise<{
   }
 }
 
-export async function handleGetDatabaseSchema(pool: pg.Pool) {
+export async function handleGetDatabaseSchema(pool: pg.Pool, schemaName: string = "public") {
   const client = await pool.connect();
   try {
     // Get all tables with their columns, types, and constraints
@@ -884,11 +884,11 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
       FROM information_schema.tables t
       LEFT JOIN information_schema.columns c ON t.table_name = c.table_name AND t.table_schema = c.table_schema
       LEFT JOIN information_schema.table_constraints tc ON t.table_name = tc.table_name AND t.table_schema = tc.table_schema
-      WHERE t.table_schema = 'public' AND t.table_type = 'BASE TABLE'
+      WHERE t.table_schema = $1 AND t.table_type = 'BASE TABLE'
       ORDER BY t.table_name, c.ordinal_position, tc.constraint_name;
     `;
 
-    const tablesResult = await client.query(tablesQuery);
+    const tablesResult = await client.query(tablesQuery, [schemaName]);
 
     // Get indexes separately - wrap in try-catch in case of permission issues
     let indexesResult;
@@ -900,10 +900,10 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
           indexname,
           indexdef
         FROM pg_indexes
-        WHERE schemaname = 'public'
+        WHERE schemaname = $1
         ORDER BY tablename, indexname;
       `;
-      indexesResult = await client.query(indexesQuery);
+      indexesResult = await client.query(indexesQuery, [schemaName]);
     } catch (indexError: any) {
       console.error("Failed to fetch indexes:", indexError.message);
       indexesResult = { rows: [] };
@@ -925,11 +925,11 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
         ON ccu.constraint_name = tc.constraint_name
         AND ccu.table_schema = tc.table_schema
       WHERE tc.constraint_type = 'FOREIGN KEY' 
-        AND tc.table_schema = 'public'
+        AND tc.table_schema = $1
       ORDER BY tc.table_name, kcu.column_name;
     `;
 
-    const foreignKeysResult = await client.query(foreignKeysQuery);
+    const foreignKeysResult = await client.query(foreignKeysQuery, [schemaName]);
 
     // Get views
     const viewsQuery = `
@@ -937,11 +937,11 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
         table_name,
         view_definition
       FROM information_schema.views
-      WHERE table_schema = 'public'
+      WHERE table_schema = $1
       ORDER BY table_name;
     `;
 
-    const viewsResult = await client.query(viewsQuery);
+    const viewsResult = await client.query(viewsQuery, [schemaName]);
 
     // Get functions
     const functionsQuery = `
@@ -951,11 +951,11 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
         data_type,
         routine_definition
       FROM information_schema.routines
-      WHERE routine_schema = 'public'
+      WHERE routine_schema = $1
       ORDER BY routine_name;
     `;
 
-    const functionsResult = await client.query(functionsQuery);
+    const functionsResult = await client.query(functionsQuery, [schemaName]);
 
     // Get table statistics - wrap in try-catch in case of permission issues
     let statsResult;
@@ -974,10 +974,10 @@ export async function handleGetDatabaseSchema(pool: pg.Pool) {
           last_analyze,
           last_autoanalyze
         FROM pg_stat_user_tables
-        WHERE schemaname = 'public'
+        WHERE schemaname = $1
         ORDER BY tablename;
       `;
-      statsResult = await client.query(statsQuery);
+      statsResult = await client.query(statsQuery, [schemaName]);
     } catch (statsError: any) {
       console.error("Failed to fetch statistics:", statsError.message);
       statsResult = { rows: [] };
@@ -1123,7 +1123,8 @@ export async function handleSearchText(
   searchTerm: string,
   tables?: string[],
   columns?: string[],
-  limit: number = 5
+  limit: number = 5,
+  schemaName: string = "public"
 ) {
   const client = await pool.connect();
   try {
@@ -1153,7 +1154,7 @@ export async function handleSearchText(
         c.data_type
       FROM information_schema.tables t
       JOIN information_schema.columns c ON t.table_name = c.table_name AND t.table_schema = c.table_schema
-      WHERE t.table_schema = 'public' 
+      WHERE t.table_schema = $1 
         AND t.table_type = 'BASE TABLE'
         AND c.data_type IN ('text', 'character varying', 'character', 'varchar', 'char')
     `;
@@ -1172,7 +1173,7 @@ export async function handleSearchText(
     tablesQuery += ` ORDER BY t.table_name, c.column_name`;
 
     // Build parameters array
-    const queryParams = [];
+    const queryParams: any[] = [schemaName];
     if (tables && tables.length > 0) {
       queryParams.push(...tables);
     }
@@ -1211,8 +1212,9 @@ export async function handleSearchText(
       // Validate table and column names to prevent SQL injection
       const validTableName = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName) ? tableName : null;
       const validColumnName = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(columnName) ? columnName : null;
+      const validSchemaName = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(schemaName) ? schemaName : null;
       
-      if (!validTableName || !validColumnName) {
+      if (!validTableName || !validColumnName || !validSchemaName) {
         continue; // Skip invalid table/column names
       }
 
@@ -1224,7 +1226,7 @@ export async function handleSearchText(
           ${validColumnName} as column_value,
           ts_rank(to_tsvector('english', ${validColumnName}), plainto_tsquery('english', $1)) as rank,
           ts_headline('english', ${validColumnName}, plainto_tsquery('english', $1), 'MaxWords=50, MinWords=10') as headline
-        FROM ${validTableName}
+        FROM ${validSchemaName}.${validTableName}
         WHERE to_tsvector('english', ${validColumnName}) @@ plainto_tsquery('english', $1)
         ORDER BY rank DESC
         LIMIT $4
@@ -1242,7 +1244,7 @@ export async function handleSearchText(
             ${validColumnName} as column_value,
             1.0 as rank,
             ${validColumnName} as headline
-          FROM ${validTableName}
+          FROM ${validSchemaName}.${validTableName}
           WHERE ${validColumnName} ILIKE $1
           LIMIT $4
         `;
