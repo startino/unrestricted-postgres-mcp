@@ -85,6 +85,8 @@ server.tool(
   "execute_query",
   `Run a read-only SQL query (SELECT statements). Use this to examine data, understand table structures, and verify changes. Executed in read-only mode for safety.
 
+Args: { "sql": string }
+
 Supports complex queries with:
 - JOINs (INNER, LEFT, RIGHT, FULL OUTER)
 - Subqueries and CTEs (Common Table Expressions)
@@ -102,7 +104,12 @@ Note: Only SELECT statements are allowed. For other operations, use execute_dml_
 
 Input format tips:
 - Provide raw SQL only. Do not wrap in triple quotes or code fences.
-- OK: "SELECT * FROM users;"  Not OK: "\`\`\`sql\nSELECT * FROM users;\n\`\`\`"`,
+- OK: "SELECT * FROM users;"  Not OK: "\`\`\`sql\nSELECT * FROM users;\n\`\`\`"
+
+Bad examples (do not do this):
+- { "sql": "UPDATE users SET ..." }  → Use execute_dml_ddl_dcl_tcl instead
+
+Quick chooser: Use execute_query for SELECT/CTE/EXPLAIN/SHOW; use execute_dml_ddl_dcl_tcl for INSERT/UPDATE/DELETE/DDL/DCL/TCL.`,
   { 
     sql: z.string()
       .min(1, "SQL query cannot be empty")
@@ -199,17 +206,32 @@ Example usage: Call without parameters to get the complete schema overview.`,
 
 server.tool(
   "execute_dml_ddl_dcl_tcl",
-  `Execute DML, DDL, DCL, or TCL statements (INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc). Changes are automatically committed.
+  `Execute DML, DDL, DCL, or TCL statements (INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, GRANT/REVOKE, COMMIT/ROLLBACK). Changes are automatically committed.
 
-**IMPORTANT: Always use parameterized queries for text values** to avoid quoting errors. Provide SQL with $1, $2, $3 placeholders and pass values in the params array.
+Args: { "sql": string, "params"?: any[] }  — params supports string | number | boolean | null (max 50).
 
-**Recommended usage pattern (use this for ALL text values):**
-{
-  "sql": "UPDATE echo_air.icrb_data SET field_value_enriched = $1, enrichment_population_notes = $2, enrichment_sources_used = $3, status = 'Enriched', last_updated = NOW() WHERE engagement_id = $4 AND field_id = $5;",
-  "params": ["<long enriched text with quotes/HTML/special chars>", "<notes text>", "<sources text>", 126, 1]
-}
+IMPORTANT: Always use parameterized queries for any text values. Provide SQL with $1, $2, $3 placeholders and pass values via the top-level params array.
 
-Parameter types: string, number, boolean, null (max 50 parameters).
+Good examples (copy-paste safe):
+- Insert:
+  { "sql": "INSERT INTO users (name, email) VALUES ($1, $2)", "params": ["John", "john@example.com"] }
+- Update:
+  { "sql": "UPDATE users SET last_login = NOW() WHERE name = $1", "params": ["Alice"] }
+- Upsert:
+  { "sql": "INSERT INTO users (id, name, email) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name", "params": [1, "John", "john@example.com"] }
+- Long text with special characters:
+  { "sql": "UPDATE echo_air.icrb_data SET field_value_enriched = $1, enrichment_population_notes = $2, enrichment_sources_used = $3, status = 'Enriched', last_updated = NOW() WHERE engagement_id = $4 AND field_id = $5;", "params": ["<long text>", "<notes>", "<sources>", 126, 24] }
+
+Anti-patterns (will fail):
+- Embedding params into the SQL string:
+  { "sql": "UPDATE ...;\n</parameter name>\n<parameter name=\"params\">[\"...\"]" }
+  Reason: The tool does not parse inline or XML-serialized params; params must be a separate top-level JSON array.
+- Using SELECT here:
+  { "sql": "SELECT * FROM users" }  → Use execute_query instead.
+
+Input format tips:
+- Provide raw SQL only. Do not wrap in triple quotes or code fences.
+- OK: "UPDATE t SET c='x';"  Not OK: "'''\nUPDATE t SET c='x';\n'''"
 
 Supported operations:
 - DML: INSERT, UPDATE, DELETE, UPSERT (INSERT...ON CONFLICT)
@@ -217,24 +239,9 @@ Supported operations:
 - DCL: GRANT, REVOKE (permissions)
 - TCL: BEGIN, COMMIT, ROLLBACK (transactions)
 
-PostgreSQL features supported:
-- COPY for bulk operations
-- INSERT...ON CONFLICT for upserts
-- Window functions and CTEs
-- JSON operators and array functions
-- Range types and advanced data types
-- Full-text search functions
+Note: All operations are automatically committed. Use execute_query for read-only operations.
 
-Examples with parameters:
-- Insert: { "sql": "INSERT INTO users (name, email) VALUES ($1, $2)", "params": ["John", "john@example.com"] }
-- Update: { "sql": "UPDATE users SET last_login = NOW() WHERE name = $1", "params": ["Alice"] }
-- Upsert: { "sql": "INSERT INTO users (id, name, email) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name", "params": [1, "John", "john@example.com"] }
-
-Raw SQL (no params) is supported but NOT recommended for text values:
-- Provide raw SQL only. Do not wrap in triple quotes or code fences.
-- OK: "UPDATE t SET c='x';"  Not OK: "'''\nUPDATE t SET c='x';\n'''"
-
-Note: All operations are automatically committed. Use execute_query for read-only operations.`,
+Quick chooser: Use execute_query for SELECT/CTE/EXPLAIN/SHOW; use execute_dml_ddl_dcl_tcl for INSERT/UPDATE/DELETE/DDL/DCL/TCL.`,
   {
     sql: z.string()
       .min(1, "SQL statement cannot be empty")
