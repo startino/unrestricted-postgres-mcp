@@ -223,7 +223,11 @@ Examples:
 
 Note: All operations are automatically committed. Use execute_query for read-only operations.
 
-Input format tips:
+Preferred pattern (avoids quoting errors):
+- SQL: "UPDATE echo_air.icrb_data SET field_value_enriched = $1, enrichment_population_notes = $2, enrichment_sources_used = $3, status = 'Enriched', last_updated = NOW() WHERE engagement_id = $4 AND field_id = $5;"
+- Params: ["<long enriched text>", "<notes>", "<sources>", 126, 1]
+
+Input format tips (raw SQL path still supported):
 - Provide raw SQL only. Do not wrap in triple quotes or code fences.
 - OK: "UPDATE t SET c='x';"  Not OK: "'''\nUPDATE t SET c='x';\n'''"`,
   {
@@ -237,10 +241,14 @@ Input format tips:
         },
         "SELECT queries should use execute_query tool for safety. This tool is for data modification operations."
       ),
+    params: z.array(z.any())
+      .max(50, "A maximum of 50 parameters is allowed")
+      .optional()
+      .describe("Query parameters to substitute for $1, $2, ... in the SQL. Prefer this for long text values."),
   },
   async (args, extra) => {
     try {
-      const result = await handleExecuteDML(pool, args.sql);
+      const result = await handleExecuteDML(pool, args.sql, args.params);
       return transformHandlerResponse(result);
     } catch (error) {
       let errorMessage = error instanceof Error ? error.message : String(error);

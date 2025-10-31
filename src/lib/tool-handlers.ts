@@ -220,6 +220,7 @@ export async function handleExecuteQuery(pool: pg.Pool, sql: string) {
 export async function handleExecuteDML(
   pool: pg.Pool,
   sql: string,
+  params?: any[]
 ) {
   const client = await pool.connect();
   try {
@@ -249,7 +250,7 @@ export async function handleExecuteDML(
     try {
       // Execute the SQL statement(s)
       const startTime = Date.now();
-      const result = await client.query(sql);
+      const result = await client.query(sql, Array.isArray(params) ? params : []);
       const execTime = Date.now() - startTime;
 
       // Automatically commit the transaction
@@ -297,6 +298,7 @@ export async function handleExecuteDML(
                 message: "SQL execution failed",
                 details: error.message,
                 sql_preview: sql.trim().substring(0, 200) + (sql.length > 200 ? "..." : ""),
+                params_provided: Array.isArray(params) ? params.length : 0,
                 error_type: error.code || "SQL_ERROR",
                 suggestion: "Check your SQL syntax and ensure all referenced tables/columns exist"
               },
