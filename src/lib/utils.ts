@@ -34,6 +34,19 @@ export function generateTransactionId(): string {
 }
 
 /**
+ * Ensure the session is clean before use by rolling back any open/aborted
+ * transaction and discarding session state. Errors are ignored.
+ */
+export async function ensureCleanSession(client: pg.PoolClient): Promise<void> {
+  try {
+    await client.query("ROLLBACK");
+  } catch {}
+  try {
+    await client.query("DISCARD ALL");
+  } catch {}
+}
+
+/**
  * Sanitize LLM-generated SQL by stripping common wrappers like code fences and triple quotes.
  * - Removes leading/trailing ```sql ... ``` or ``` ... ```
  * - Removes leading/trailing ''' or """

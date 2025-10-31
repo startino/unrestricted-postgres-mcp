@@ -5,6 +5,7 @@ import {
   safelyReleaseClient,
   generateTransactionId,
   sanitizeSql,
+  ensureCleanSession,
 } from "./utils";
 import { SCHEMA_PATH } from "./types";
 
@@ -143,6 +144,8 @@ export async function handleExecuteRollback(
 export async function handleExecuteQuery(pool: pg.Pool, sql: string) {
   const client = await pool.connect();
   try {
+    // Clear any inherited aborted state before starting
+    await ensureCleanSession(client);
     if (!sql) {
       safelyReleaseClient(client);
       return {
@@ -185,11 +188,24 @@ export async function handleExecuteQuery(pool: pg.Pool, sql: string) {
 
     // Execute the query in a read-only transaction
     await client.query("BEGIN TRANSACTION READ ONLY");
+    let result;
     const startTime = Date.now();
-    const result = await client.query(sql);
+    try {
+      result = await client.query(sql);
+      await client.query("COMMIT");
+    } catch (err: any) {
+      try { await client.query("ROLLBACK"); } catch {}
+      // Auto-recover once if aborted
+      if (String(err?.message || "").includes("current transaction is aborted")) {
+        await ensureCleanSession(client);
+        await client.query("BEGIN TRANSACTION READ ONLY");
+        result = await client.query(sql);
+        await client.query("COMMIT");
+      } else {
+        throw err;
+      }
+    }
     const execTime = Date.now() - startTime;
-
-    await client.query("COMMIT");
 
     return {
       content: [
@@ -224,6 +240,8 @@ export async function handleExecuteDML(
 ) {
   const client = await pool.connect();
   try {
+    // Clear any inherited aborted state before starting
+    await ensureCleanSession(client);
     if (!sql) {
       safelyReleaseClient(client);
       return {
@@ -250,11 +268,23 @@ export async function handleExecuteDML(
     try {
       // Execute the SQL statement(s)
       const startTime = Date.now();
-      const result = await client.query(sql, Array.isArray(params) ? params : []);
+      let result;
+      try {
+        result = await client.query(sql, Array.isArray(params) ? params : []);
+        await client.query("COMMIT");
+      } catch (err: any) {
+        try { await client.query("ROLLBACK"); } catch {}
+        // Auto-recover once if aborted
+        if (String(err?.message || "").includes("current transaction is aborted")) {
+          await ensureCleanSession(client);
+          await client.query("BEGIN");
+          result = await client.query(sql, Array.isArray(params) ? params : []);
+          await client.query("COMMIT");
+        } else {
+          throw err;
+        }
+      }
       const execTime = Date.now() - startTime;
-
-      // Automatically commit the transaction
-      await client.query("COMMIT");
 
       // Release the client
       safelyReleaseClient(client);
