@@ -98,7 +98,11 @@ Examples:
 - Complex: "WITH recent_orders AS (SELECT * FROM orders WHERE created_at > NOW() - INTERVAL '30 days') SELECT u.name, COUNT(ro.id) FROM users u LEFT JOIN recent_orders ro ON u.id = ro.user_id GROUP BY u.id, u.name"
 - JSON: "SELECT data->>'name' as name, data->'address'->>'city' as city FROM profiles WHERE data ? 'address'"
 
-Note: Only SELECT statements are allowed. For other operations, use execute_dml_ddl_dcl_tcl.`,
+Note: Only SELECT statements are allowed. For other operations, use execute_dml_ddl_dcl_tcl.
+
+Input format tips:
+- Provide raw SQL only. Do not wrap in triple quotes or code fences.
+- OK: "SELECT * FROM users;"  Not OK: "\`\`\`sql\nSELECT * FROM users;\n\`\`\`"`,
   { 
     sql: z.string()
       .min(1, "SQL query cannot be empty")
@@ -217,7 +221,11 @@ Examples:
 - Upsert: "INSERT INTO users (id, name, email) VALUES (1, 'John', 'john@example.com') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email"
 - Bulk: "COPY users (name, email) FROM STDIN WITH (FORMAT csv)"
 
-Note: All operations are automatically committed. Use execute_query for read-only operations.`,
+Note: All operations are automatically committed. Use execute_query for read-only operations.
+
+Input format tips:
+- Provide raw SQL only. Do not wrap in triple quotes or code fences.
+- OK: "UPDATE t SET c='x';"  Not OK: "'''\nUPDATE t SET c='x';\n'''"`,
   {
     sql: z.string()
       .min(1, "SQL statement cannot be empty")

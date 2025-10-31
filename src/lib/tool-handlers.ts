@@ -4,6 +4,7 @@ import {
   isReadOnlyQuery,
   safelyReleaseClient,
   generateTransactionId,
+  sanitizeSql,
 } from "./utils";
 import { SCHEMA_PATH } from "./types";
 
@@ -159,6 +160,9 @@ export async function handleExecuteQuery(pool: pg.Pool, sql: string) {
       };
     }
 
+    // Sanitize common LLM wrappers
+    sql = sanitizeSql(sql);
+
     // Validate that the query is read-only
     if (!isReadOnlyQuery(sql)) {
       safelyReleaseClient(client);
@@ -235,6 +239,9 @@ export async function handleExecuteDML(
         isError: true,
       };
     }
+
+    // Sanitize common LLM wrappers
+    sql = sanitizeSql(sql);
 
     // Begin a transaction
     await client.query("BEGIN");
@@ -328,6 +335,9 @@ export async function handleExecuteMaintenance(pool: pg.Pool, sql: string) {
         isError: true,
       };
     }
+
+    // Sanitize common LLM wrappers
+    sql = sanitizeSql(sql);
 
     // Check if the SQL is a maintenance command
     // VACUUM, ANALYZE, CREATE DATABASE can't be executed in a transaction
