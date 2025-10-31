@@ -199,7 +199,17 @@ Example usage: Call without parameters to get the complete schema overview.`,
 
 server.tool(
   "execute_dml_ddl_dcl_tcl",
-  `Execute DML, DDL, DCL, or TCL statements (INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc). Supports multiple semicolon-separated statements in one transaction - batch all related operations into a single call. Changes are automatically committed.
+  `Execute DML, DDL, DCL, or TCL statements (INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc). Changes are automatically committed.
+
+**IMPORTANT: Always use parameterized queries for text values** to avoid quoting errors. Provide SQL with $1, $2, $3 placeholders and pass values in the params array.
+
+**Recommended usage pattern (use this for ALL text values):**
+{
+  "sql": "UPDATE echo_air.icrb_data SET field_value_enriched = $1, enrichment_population_notes = $2, enrichment_sources_used = $3, status = 'Enriched', last_updated = NOW() WHERE engagement_id = $4 AND field_id = $5;",
+  "params": ["<long enriched text with quotes/HTML/special chars>", "<notes text>", "<sources text>", 126, 1]
+}
+
+Parameter types: string, number, boolean, null (max 50 parameters).
 
 Supported operations:
 - DML: INSERT, UPDATE, DELETE, UPSERT (INSERT...ON CONFLICT)
@@ -215,25 +225,20 @@ PostgreSQL features supported:
 - Range types and advanced data types
 - Full-text search functions
 
-Examples:
-- Single: "INSERT INTO users (name, email) VALUES ('John', 'john@example.com')"
-- Multiple: "INSERT INTO users (name) VALUES ('Alice'); UPDATE users SET last_login = NOW() WHERE name = 'Alice'"
-- Upsert: "INSERT INTO users (id, name, email) VALUES (1, 'John', 'john@example.com') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email"
-- Bulk: "COPY users (name, email) FROM STDIN WITH (FORMAT csv)"
+Examples with parameters:
+- Insert: { "sql": "INSERT INTO users (name, email) VALUES ($1, $2)", "params": ["John", "john@example.com"] }
+- Update: { "sql": "UPDATE users SET last_login = NOW() WHERE name = $1", "params": ["Alice"] }
+- Upsert: { "sql": "INSERT INTO users (id, name, email) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name", "params": [1, "John", "john@example.com"] }
 
-Note: All operations are automatically committed. Use execute_query for read-only operations.
-
-Preferred pattern (avoids quoting errors):
-- SQL: "UPDATE echo_air.icrb_data SET field_value_enriched = $1, enrichment_population_notes = $2, enrichment_sources_used = $3, status = 'Enriched', last_updated = NOW() WHERE engagement_id = $4 AND field_id = $5;"
-- Params: ["<long enriched text>", "<notes>", "<sources>", 126, 1]
-
-Input format tips (raw SQL path still supported):
+Raw SQL (no params) is supported but NOT recommended for text values:
 - Provide raw SQL only. Do not wrap in triple quotes or code fences.
-- OK: "UPDATE t SET c='x';"  Not OK: "'''\nUPDATE t SET c='x';\n'''"`,
+- OK: "UPDATE t SET c='x';"  Not OK: "'''\nUPDATE t SET c='x';\n'''"
+
+Note: All operations are automatically committed. Use execute_query for read-only operations.`,
   {
     sql: z.string()
       .min(1, "SQL statement cannot be empty")
-      .describe("SQL statement(s) to execute - supports multiple semicolon-separated statements, COPY operations, upserts, window functions, CTEs, and all PostgreSQL features")
+      .describe("SQL statement with $1, $2, $3 placeholders for parameters (STRONGLY RECOMMENDED) OR raw SQL. Always use placeholders for text values to avoid quoting errors.")
       .refine(
         (sql) => {
           const trimmed = sql.trim().toUpperCase();
@@ -244,7 +249,7 @@ Input format tips (raw SQL path still supported):
     params: z.array(z.any())
       .max(50, "A maximum of 50 parameters is allowed")
       .optional()
-      .describe("Query parameters to substitute for $1, $2, ... in the SQL. Prefer this for long text values."),
+      .describe("Array of values to substitute for $1, $2, $3, etc. in the SQL. ALWAYS use this for text values, especially long content or content with quotes/HTML/special characters. Supported types: string, number, boolean, null."),
   },
   async (args, extra) => {
     try {
