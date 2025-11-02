@@ -102,10 +102,6 @@ Examples:
 
 Note: Only SELECT statements are allowed. For other operations, use execute_dml_ddl_dcl_tcl.
 
-Input format tips:
-- Provide raw SQL only. Do not wrap in triple quotes or code fences.
-- OK: "SELECT * FROM users;"  Not OK: "\`\`\`sql\nSELECT * FROM users;\n\`\`\`"
-
 Bad examples (do not do this):
 - { "sql": "UPDATE users SET ..." }  → Use execute_dml_ddl_dcl_tcl instead
 
@@ -228,10 +224,6 @@ Anti-patterns (will fail):
   Reason: The tool does not parse inline or XML-serialized params; params must be a separate top-level JSON array.
 - Using SELECT here:
   { "sql": "SELECT * FROM users" }  → Use execute_query instead.
-
-Input format tips:
-- Provide raw SQL only. Do not wrap in triple quotes or code fences.
-- OK: "UPDATE t SET c='x';"  Not OK: "'''\nUPDATE t SET c='x';\n'''"
 
 Supported operations:
 - DML: INSERT, UPDATE, DELETE, UPSERT (INSERT...ON CONFLICT)

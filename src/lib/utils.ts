@@ -60,9 +60,16 @@ export function sanitizeSql(input: string): string {
   if (sql.startsWith("```")) {
     const firstNewline = sql.indexOf("\n");
     if (firstNewline !== -1) {
+      // Multi-line code fence: ```sql\n...\n```
       const header = sql.slice(0, firstNewline).trim();
       if (/^```(sql|postgresql|postgres)?$/i.test(header)) {
         sql = sql.slice(firstNewline + 1);
+      }
+    } else {
+      // Single-line code fence: ```...``` or ```sql...```
+      const headerMatch = sql.match(/^```(sql|postgresql|postgres)?/i);
+      if (headerMatch) {
+        sql = sql.slice(headerMatch[0].length);
       }
     }
     if (sql.endsWith("```")) {
