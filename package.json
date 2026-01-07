@@ -55,7 +55,7 @@
     "sql-executor"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.8.0",
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "express": "^5.1.0",
     "pg": "^8.13.0",
     "zod": "^3.24.2"
